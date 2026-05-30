@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String        @id @default(cuid())
+  discordId      String        @unique
+  username       String?
+  coins          Int           @default(0)
+  jkBalance      Int           @default(0)
+  lastDaily      DateTime?
+  selectedRod    String        @default("basic")
+  ownedRods      Json          @default("[\"basic\"]")
+  fishingCount   Int           @default(0)
+  coinflipPlayed Int           @default(0)
+  slotsPlayed    Int           @default(0)
+  minesPlayed    Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  transactions   Transaction[]
+  minesGames     MinesGame[]
+}
+
+model Transaction {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  currency      String
+  amount        Int
+  balanceBefore Int
+  balanceAfter  Int
+  reason        String?
+  createdAt     DateTime @default(now())
+}
+
+model MinesGame {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String?
+  channelId String?
+  bet       Int
+  mines     Int
+  board     Json
+  revealed  Json     @default("[]")
+  status    String   @default("ACTIVE")
+  payout    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaderboardCache {
+  id        Int      @id @default(1)
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

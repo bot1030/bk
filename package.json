@@ -1,0 +1,29 @@
+{
+  "name": "jk-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord economy bot with Coins, JK餘額, fishing, gambling, and leaderboards.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "start": "node src/index.js",
+  "railway:start": "prisma db push && node src/index.js",
+  "deploy": "node src/deploy-commands.js",
+  "db:push": "prisma db push",
+  "db:generate": "prisma generate",
+  "postinstall": "prisma generate",
+  "studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.0"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  }
+}
