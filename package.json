@@ -7,13 +7,14 @@
   "engines": {
     "node": ">=22.12.0"
   },
-  "start": "node src/index.js",
-  "railway:start": "prisma db push && node src/index.js",
-  "deploy": "node src/deploy-commands.js",
-  "db:push": "prisma db push",
-  "db:generate": "prisma generate",
-  "postinstall": "prisma generate",
-  "studio": "prisma studio"
+  "scripts": {
+    "start": "node src/index.js",
+    "railway:start": "prisma db push && node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate",
+    "studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
