@@ -1,7 +1,12 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const prisma = require('../database/prisma');
 const { findActiveGame, buildMinesRows } = require('../systems/minesSystem');
 const { formatCoins } = require('../utils/format');
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,7 +17,7 @@ module.exports = {
     const game = await findActiveGame(interaction.user.id);
 
     if (!game) {
-      return interaction.reply({ content: '❌ 你目前沒有進行中的踩地雷遊戲。' });
+      return interaction.reply(privatePayload({ content: '❌ 你目前沒有進行中的踩地雷遊戲。' }));
     }
 
     const updatedGame = await prisma.minesGame.update({
@@ -35,6 +40,6 @@ module.exports = {
       }
     }
 
-    return interaction.reply({ embeds: [embed] });
+    return interaction.reply(privatePayload({ embeds: [embed] }));
   }
 };

@@ -5,7 +5,8 @@ const {
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  MessageFlags
 } = require('discord.js');
 const prisma = require('../database/prisma');
 const fishingConfig = require('../config/fishingConfig');
@@ -15,6 +16,7 @@ const { getFishingRewardListText, rollFishingResult } = require('./fishingSystem
 const { getOrCreateUser, spendCoins, addCoins, addJK } = require('./economySystem');
 const { rollCoinflipWithChoice, rollSlots, calculatePayout, faceLabel } = require('./gamblingSystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert, sendSpecialRewardAlert } = require('./riskSystem');
+const { announceBigWin } = require('./bigWinSystem');
 const { validateBet } = require('../utils/guards');
 const { formatCoins, formatJK } = require('../utils/format');
 const {
@@ -24,6 +26,12 @@ const {
   getMultiplier,
   findActiveGame
 } = require('./minesSystem');
+
+
+const PRIVATE_REPLY = { flags: MessageFlags.Ephemeral };
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
 
 function parsePositiveInteger(raw) {
   const cleaned = String(raw || '').replace(/[,，\s]/g, '');
@@ -219,20 +227,20 @@ async function sendSetupPanel(interaction, channel, type) {
     mines: '踩地雷'
   };
 
-  return interaction.reply({
+  return interaction.reply(privatePayload({
     content: `✅ 已在 ${channel} 建立 **${labels[type]}** 遊戲面板。`
-  });
+  }));
 }
 
 async function executeCoinflipFromPanel(interaction, choice, bet) {
   const check = validateBet(bet, gamblingConfig.coinflip.minBet, gamblingConfig.coinflip.maxBet);
-  if (!check.ok) return interaction.reply({ content: `❌ ${check.message}` });
+  if (!check.ok) return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
 
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
-  if (!risk.ok) return interaction.reply({ content: risk.message });
+  if (!risk.ok) return interaction.reply(privatePayload({ content: risk.message }));
 
   const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉下注');
-  if (!spent.ok) return interaction.reply({ content: '❌ 你的金幣不足。' });
+  if (!spent.ok) return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -253,6 +261,19 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
     `本局獲得：**${formatCoins(payout)}**`
   ]);
 
+  if (result.won && payout > 0) {
+    await announceBigWin(interaction.client, interaction.guildId, {
+      user: interaction.user,
+      gameName: '硬幣翻轉',
+      coins: payout,
+      detailLines: [
+        `下注金額：**${formatCoins(bet)}**`,
+        `玩家選擇：**${result.choiceLabel}**`,
+        `硬幣結果：**${result.resultLabel}**`
+      ]
+    });
+  }
+
   const embed = new EmbedBuilder()
     .setColor(result.won ? 0x2ecc71 : 0xe74c3c)
     .setTitle('🪙 硬幣翻轉')
@@ -266,18 +287,18 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
       result.won ? `你獲得了 **${formatCoins(payout)}**。` : `你失去了 **${formatCoins(bet)}**。`
     ].join('\n'));
 
-  return interaction.reply({ embeds: [embed] });
+  return interaction.reply(privatePayload({ embeds: [embed] }));
 }
 
 async function executeSlotsFromPanel(interaction, bet) {
   const check = validateBet(bet, gamblingConfig.slots.minBet, gamblingConfig.slots.maxBet);
-  if (!check.ok) return interaction.reply({ content: `❌ ${check.message}` });
+  if (!check.ok) return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
 
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
-  if (!risk.ok) return interaction.reply({ content: risk.message });
+  if (!risk.ok) return interaction.reply(privatePayload({ content: risk.message }));
 
   const spent = await spendCoins(interaction.user, bet, 'SLOTS', '老虎機下注');
-  if (!spent.ok) return interaction.reply({ content: '❌ 你的金幣不足。' });
+  if (!spent.ok) return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -297,6 +318,20 @@ async function executeSlotsFromPanel(interaction, bet) {
     `本局獲得：**${formatCoins(payout)}**`
   ]);
 
+  if (payout > 0) {
+    await announceBigWin(interaction.client, interaction.guildId, {
+      user: interaction.user,
+      gameName: '老虎機',
+      coins: payout,
+      detailLines: [
+        `下注金額：**${formatCoins(bet)}**`,
+        `結果：**${visual.join(' | ')}**`,
+        `獎項：**${result.label}**`,
+        `倍率：**${result.multiplier}x**`
+      ]
+    });
+  }
+
   const embed = new EmbedBuilder()
     .setColor(payout > 0 ? 0x2ecc71 : 0xe74c3c)
     .setTitle('🎰 老虎機')
@@ -311,7 +346,7 @@ async function executeSlotsFromPanel(interaction, bet) {
       `獲得：**${formatCoins(payout)}**`
     ].join('\n'));
 
-  return interaction.reply({ embeds: [embed] });
+  return interaction.reply(privatePayload({ embeds: [embed] }));
 }
 
 function buildMinesEmbed(game, title = '💣 踩地雷') {
@@ -338,23 +373,23 @@ function buildMinesEmbed(game, title = '💣 踩地雷') {
 async function executeMinesFromPanel(interaction, bet, mineCount) {
   const existing = await findActiveGame(interaction.user.id);
   if (existing) {
-    return interaction.reply({
+    return interaction.reply(privatePayload({
       content: '❌ 你已經有一場進行中的踩地雷遊戲。請先使用 `/mines_cashout` 提現，或使用 `/mines_quit` 退出。'
-    });
+    }));
   }
 
   const check = validateBet(bet, gamblingConfig.mines.minBet, gamblingConfig.mines.maxBet);
-  if (!check.ok) return interaction.reply({ content: `❌ ${check.message}` });
+  if (!check.ok) return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
 
   if (mineCount < gamblingConfig.mines.minMines || mineCount > gamblingConfig.mines.maxMines) {
-    return interaction.reply({ content: `❌ 地雷數量必須是 ${gamblingConfig.mines.minMines}–${gamblingConfig.mines.maxMines} 顆。` });
+    return interaction.reply(privatePayload({ content: `❌ 地雷數量必須是 ${gamblingConfig.mines.minMines}–${gamblingConfig.mines.maxMines} 顆。` }));
   }
 
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
-  if (!risk.ok) return interaction.reply({ content: risk.message });
+  if (!risk.ok) return interaction.reply(privatePayload({ content: risk.message }));
 
   const spent = await spendCoins(interaction.user, bet, 'MINES', '踩地雷下注');
-  if (!spent.ok) return interaction.reply({ content: '❌ 你的金幣不足。' });
+  if (!spent.ok) return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
 
   const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
 
@@ -375,10 +410,10 @@ async function executeMinesFromPanel(interaction, bet, mineCount) {
     data: { minesPlayed: { increment: 1 } }
   });
 
-  await interaction.reply({
+  await interaction.reply(privatePayload({
     embeds: [buildMinesEmbed(game)],
     components: buildMinesRows(game)
-  });
+  }));
 
   const message = await interaction.fetchReply();
 
@@ -405,10 +440,10 @@ async function handlePanelButton(interaction) {
         '你確定要開始釣魚嗎？'
       ].join('\n'));
 
-    return interaction.reply({
+    return interaction.reply(privatePayload({
       embeds: [embed],
       components: buildFishConfirmButtons(interaction.user.id)
-    });
+    }));
   }
 
   if (game === 'coinflip') {
@@ -477,13 +512,13 @@ async function handlePanelModal(interaction) {
 
   if (game === 'coinflip') {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
-    if (!bet) return interaction.reply({ content: '❌ 請輸入有效的下注金額。' });
+    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的下注金額。' }));
     return executeCoinflipFromPanel(interaction, action, bet);
   }
 
   if (game === 'slots') {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
-    if (!bet) return interaction.reply({ content: '❌ 請輸入有效的下注金額。' });
+    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的下注金額。' }));
     return executeSlotsFromPanel(interaction, bet);
   }
 
@@ -491,8 +526,8 @@ async function handlePanelModal(interaction) {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
     const mineCount = parsePositiveInteger(interaction.fields.getTextInputValue('mines'));
 
-    if (!bet) return interaction.reply({ content: '❌ 請輸入有效的下注金額。' });
-    if (!mineCount) return interaction.reply({ content: '❌ 請輸入有效的地雷數量。' });
+    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的下注金額。' }));
+    if (!mineCount) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的地雷數量。' }));
 
     return executeMinesFromPanel(interaction, bet, mineCount);
   }

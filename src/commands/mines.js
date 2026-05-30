@@ -1,10 +1,11 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const prisma = require('../database/prisma');
 const gamblingConfig = require('../config/gamblingConfig');
 const { validateBet } = require('../utils/guards');
 const { formatCoins } = require('../utils/format');
 const { spendCoins, addCoins } = require('../systems/economySystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
+const { announceBigWin } = require('../systems/bigWinSystem');
 const {
   createBoard,
   buildMinesRows,
@@ -12,6 +13,11 @@ const {
   getMultiplier,
   findActiveGame
 } = require('../systems/minesSystem');
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
 
 function buildMinesEmbed(game, title = '💣 踩地雷') {
   const revealed = Array.isArray(game.revealed) ? game.revealed : JSON.parse(game.revealed);
@@ -60,24 +66,24 @@ module.exports = {
 
     const existing = await findActiveGame(interaction.user.id);
     if (existing) {
-      return interaction.reply({
+      return interaction.reply(privatePayload({
         content: '❌ 你已經有一場進行中的踩地雷遊戲。請先使用 `/mines_cashout` 提現，或使用 `/mines_quit` 退出。'
-      });
+      }));
     }
 
     const check = validateBet(bet, gamblingConfig.mines.minBet, gamblingConfig.mines.maxBet);
     if (!check.ok) {
-      return interaction.reply({ content: `❌ ${check.message}` });
+      return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
     }
 
     const risk = await checkGamblingBetAllowed(interaction.user, bet);
     if (!risk.ok) {
-      return interaction.reply({ content: risk.message });
+      return interaction.reply(privatePayload({ content: risk.message }));
     }
 
     const spent = await spendCoins(interaction.user, bet, 'MINES', '踩地雷下注');
     if (!spent.ok) {
-      return interaction.reply({ content: '❌ 你的金幣不足。' });
+      return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
     }
 
     const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
@@ -98,10 +104,10 @@ module.exports = {
       data: { minesPlayed: { increment: 1 } }
     });
 
-    await interaction.reply({
+    await interaction.reply(privatePayload({
       embeds: [buildMinesEmbed(game)],
       components: buildMinesRows(game)
-    });
+    }));
 
     const message = await interaction.fetchReply();
 
@@ -124,18 +130,18 @@ module.exports = {
     });
 
     if (!game || game.status !== 'ACTIVE') {
-      return interaction.reply({ content: '❌ 這場遊戲已經結束。' });
+      return interaction.reply(privatePayload({ content: '❌ 這場遊戲已經結束。' }));
     }
 
     if (game.user.discordId !== interaction.user.id) {
-      return interaction.reply({ content: '❌ 這不是你的踩地雷遊戲。' });
+      return interaction.reply(privatePayload({ content: '❌ 這不是你的踩地雷遊戲。' }));
     }
 
     const board = Array.isArray(game.board) ? game.board : JSON.parse(game.board);
     const revealed = Array.isArray(game.revealed) ? game.revealed : JSON.parse(game.revealed);
 
     if (revealed.includes(index)) {
-      return interaction.reply({ content: '❌ 你已經點過這個格子。' });
+      return interaction.reply(privatePayload({ content: '❌ 你已經點過這個格子。' }));
     }
 
     await interaction.deferUpdate();
@@ -174,6 +180,17 @@ module.exports = {
         `本局地雷：**${game.mines}**`,
         `本局獲得：**${formatCoins(payout)}**`
       ]);
+
+      await announceBigWin(interaction.client, interaction.guildId, {
+        user: interaction.user,
+        gameName: '踩地雷',
+        coins: payout,
+        detailLines: [
+          `下注金額：**${formatCoins(game.bet)}**`,
+          `地雷數量：**${game.mines}**`,
+          '狀態：**全部安全格已清除**'
+        ]
+      });
 
       const wonGame = await prisma.minesGame.update({
         where: { id: game.id },

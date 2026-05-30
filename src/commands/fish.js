@@ -3,7 +3,8 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  MessageFlags
 } = require('discord.js');
 const fishingConfig = require('../config/fishingConfig');
 const { getOrCreateUser, spendCoins, addCoins, addJK } = require('../systems/economySystem');
@@ -11,6 +12,12 @@ const { rollFishingResult } = require('../systems/fishingSystem');
 const { formatCoins, formatJK } = require('../utils/format');
 const prisma = require('../database/prisma');
 const { sendSpecialRewardAlert } = require('../systems/riskSystem');
+const { announceBigWin } = require('../systems/bigWinSystem');
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
 
 function buildConfirmButtons(userId) {
   return [
@@ -54,6 +61,17 @@ async function executeFishing(interaction) {
       '來源：釣魚系統'
     ]);
 
+    await announceBigWin(interaction.client, interaction.guildId, {
+      user: interaction.user,
+      gameName: '釣魚系統',
+      jk: result.jk,
+      isHiddenDiamond: true,
+      detailLines: [
+        '玩家釣到了 **隱藏鑽石**！',
+        `本次釣魚成本：**${formatCoins(fishingConfig.cost)}**`
+      ]
+    });
+
     const embed = new EmbedBuilder()
       .setColor(0x9b59b6)
       .setTitle('💎 隱藏鑽石！')
@@ -72,6 +90,17 @@ async function executeFishing(interaction) {
 
   if (totalCoins > 0) {
     await addCoins(interaction.user, totalCoins, 'FISHING', `釣魚自動出售：${result.label}`);
+
+    await announceBigWin(interaction.client, interaction.guildId, {
+      user: interaction.user,
+      gameName: '釣魚系統',
+      coins: totalCoins,
+      detailLines: [
+        `魚類：**${result.label}**`,
+        `使用釣竿：**${result.rod.label}** (${result.rod.multiplier}x)`,
+        result.treasure ? `寶箱額外獎勵：**${formatCoins(treasureCoins)}**` : null
+      ].filter(Boolean)
+    });
   }
 
   const lines = [
@@ -105,17 +134,17 @@ module.exports = {
       .setTitle('🎣 釣魚確認')
       .setDescription(`每次釣魚需要花費 **${formatCoins(fishingConfig.cost)}**。\n魚類會自動出售成金幣。\n你確定要開始釣魚嗎？`);
 
-    await interaction.reply({
+    await interaction.reply(privatePayload({
       embeds: [embed],
       components: buildConfirmButtons(interaction.user.id)
-    });
+    }));
   },
 
   async handleButton(interaction) {
     const [, action, userId] = interaction.customId.split(':');
 
     if (interaction.user.id !== userId) {
-      return interaction.reply({ content: '❌ 這不是你的釣魚按鈕。' });
+      return interaction.reply(privatePayload({ content: '❌ 這不是你的釣魚按鈕。' }));
     }
 
     if (action === 'cancel') {

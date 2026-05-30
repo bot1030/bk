@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const { handlePanelButton, handlePanelModal } = require('../systems/gamePanelSystem');
 
 module.exports = {
@@ -43,7 +44,8 @@ module.exports = {
       console.error(error);
 
       const payload = {
-        content: '❌ 發生錯誤，請稍後再試。'
+        content: '❌ 發生錯誤，請稍後再試。',
+        flags: MessageFlags.Ephemeral
       };
 
       if (interaction.replied || interaction.deferred) {

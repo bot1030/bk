@@ -3,11 +3,17 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  MessageFlags
 } = require('discord.js');
 const { addCoins, spendCoins, addJK, spendJK, getBalance } = require('../systems/economySystem');
 const { JK_CONVERSION_RATE } = require('../config/economyConfig');
 const { formatCoins, formatJK } = require('../utils/format');
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
 
 const CURRENCIES = {
   coins: {
@@ -127,22 +133,22 @@ module.exports = {
     const embed = buildConvertEmbed({ amount, from, to });
     const components = buildComponents(interaction.user.id, amount, from, to);
 
-    return interaction.reply({ embeds: [embed], components });
+    return interaction.reply(privatePayload({ embeds: [embed], components }));
   },
 
   async handleButton(interaction) {
     const state = parseCustomId(interaction.customId);
 
     if (interaction.user.id !== state.userId) {
-      return interaction.reply({
+      return interaction.reply(privatePayload({
         content: '❌ 這不是你的兌換介面，請自己使用 /兌換 開啟新的介面。'
-      }).catch(() => null);
+      })).catch(() => null);
     }
 
     let { amount, from, to } = state;
 
     if (!Number.isInteger(amount) || amount <= 0) {
-      return interaction.reply({ content: '❌ 兌換數量錯誤，請重新使用 /兌換。' }).catch(() => null);
+      return interaction.reply(privatePayload({ content: '❌ 兌換數量錯誤，請重新使用 /兌換。' })).catch(() => null);
     }
 
     if (state.action === 'cancel') {
@@ -174,7 +180,7 @@ module.exports = {
     }
 
     if (state.action !== 'confirm') {
-      return interaction.reply({ content: '❌ 無效的兌換操作。' }).catch(() => null);
+      return interaction.reply(privatePayload({ content: '❌ 無效的兌換操作。' })).catch(() => null);
     }
 
     await interaction.deferUpdate();

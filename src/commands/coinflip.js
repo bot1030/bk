@@ -1,11 +1,17 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const gamblingConfig = require('../config/gamblingConfig');
 const { validateBet } = require('../utils/guards');
 const { formatCoins } = require('../utils/format');
 const { spendCoins, addCoins } = require('../systems/economySystem');
 const { rollCoinflipWithChoice } = require('../systems/gamblingSystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
+const { announceBigWin } = require('../systems/bigWinSystem');
 const prisma = require('../database/prisma');
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -36,17 +42,17 @@ module.exports = {
     const check = validateBet(bet, gamblingConfig.coinflip.minBet, gamblingConfig.coinflip.maxBet);
 
     if (!check.ok) {
-      return interaction.reply({ content: `❌ ${check.message}` });
+      return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
     }
 
     const risk = await checkGamblingBetAllowed(interaction.user, bet);
     if (!risk.ok) {
-      return interaction.reply({ content: risk.message });
+      return interaction.reply(privatePayload({ content: risk.message }));
     }
 
     const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉下注');
     if (!spent.ok) {
-      return interaction.reply({ content: '❌ 你的金幣不足。' });
+      return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
     }
 
     await prisma.user.update({
@@ -68,6 +74,19 @@ module.exports = {
       `本局獲得：**${formatCoins(payout)}**`
     ]);
 
+    if (result.won && payout > 0) {
+      await announceBigWin(interaction.client, interaction.guildId, {
+        user: interaction.user,
+        gameName: '硬幣翻轉',
+        coins: payout,
+        detailLines: [
+          `下注金額：**${formatCoins(bet)}**`,
+          `玩家選擇：**${result.choiceLabel}**`,
+          `硬幣結果：**${result.resultLabel}**`
+        ]
+      });
+    }
+
     const embed = new EmbedBuilder()
       .setColor(result.won ? 0x2ecc71 : 0xe74c3c)
       .setTitle('🪙 硬幣翻轉')
@@ -82,6 +101,6 @@ module.exports = {
           : `你失去了 **${formatCoins(bet)}**。`
       ].join('\n'));
 
-    return interaction.reply({ embeds: [embed] });
+    return interaction.reply(privatePayload({ embeds: [embed] }));
   }
 };

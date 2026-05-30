@@ -1,9 +1,15 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const prisma = require('../database/prisma');
 const { addCoins } = require('../systems/economySystem');
 const { findActiveGame, calculateMinesPayout, buildMinesRows } = require('../systems/minesSystem');
 const { formatCoins } = require('../utils/format');
 const { sendPostGameRiskAlert } = require('../systems/riskSystem');
+const { announceBigWin } = require('../systems/bigWinSystem');
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,13 +20,13 @@ module.exports = {
     const game = await findActiveGame(interaction.user.id);
 
     if (!game) {
-      return interaction.reply({ content: '❌ 你目前沒有進行中的踩地雷遊戲。' });
+      return interaction.reply(privatePayload({ content: '❌ 你目前沒有進行中的踩地雷遊戲。' }));
     }
 
     const revealed = Array.isArray(game.revealed) ? game.revealed : JSON.parse(game.revealed);
 
     if (revealed.length <= 0) {
-      return interaction.reply({ content: '❌ 你至少需要先點擊 1 個安全格才能提現。' });
+      return interaction.reply(privatePayload({ content: '❌ 你至少需要先點擊 1 個安全格才能提現。' }));
     }
 
     const payout = calculateMinesPayout(game.bet, game.mines, revealed.length);
@@ -31,6 +37,18 @@ module.exports = {
       `安全點擊：**${revealed.length}**`,
       `本局獲得：**${formatCoins(payout)}**`
     ]);
+
+    await announceBigWin(interaction.client, interaction.guildId, {
+      user: interaction.user,
+      gameName: '踩地雷',
+      coins: payout,
+      detailLines: [
+        `下注金額：**${formatCoins(game.bet)}**`,
+        `地雷數量：**${game.mines}**`,
+        `安全點擊：**${revealed.length}**`,
+        '狀態：**提現成功**'
+      ]
+    });
 
     const updatedGame = await prisma.minesGame.update({
       where: { id: game.id },
@@ -55,6 +73,6 @@ module.exports = {
       }
     }
 
-    return interaction.reply({ embeds: [embed] });
+    return interaction.reply(privatePayload({ embeds: [embed] }));
   }
 };
