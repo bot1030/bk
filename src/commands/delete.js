@@ -4,7 +4,8 @@ const { formatCoins, formatJK } = require('../utils/format');
 
 const ALLOWED_USER_IDS = new Set([
   '473647287026057227',
-  '786683877107302461'
+  '786683877107302461',
+  '1319968425698922591'
 ]);
 
 module.exports = {

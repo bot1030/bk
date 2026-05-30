@@ -2,7 +2,8 @@ module.exports = {
   // Only these users receive economy risk alerts by DM.
   adminUserIds: [
     '473647287026057227',
-    '786683877107302461'
+    '786683877107302461',
+    '1319968425698922591'
   ],
 
   gamblingTransactionTypes: ['COINFLIP', 'SLOTS', 'MINES'],
