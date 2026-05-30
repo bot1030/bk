@@ -112,7 +112,15 @@ function buildComponents(userId, amount, from, to, disabled = false) {
   ];
 }
 
+function createConvertUi(userId, amount, from = 'coins', to = 'jk') {
+  return {
+    embeds: [buildConvertEmbed({ amount, from, to })],
+    components: buildComponents(userId, amount, from, to)
+  };
+}
+
 module.exports = {
+  createConvertUi,
   data: new SlashCommandBuilder()
     .setName('兌換')
     .setDescription('開啟金幣與 JK餘額的兌換介面')

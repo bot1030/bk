@@ -1,5 +1,6 @@
 const prisma = require('../database/prisma');
 const { rods } = require('../config/rodConfig');
+const { getRodEffectLabel } = require('./fishingSystem');
 const { getOrCreateUser, spendCoins } = require('./economySystem');
 
 function normalizeOwnedRods(ownedRods) {
@@ -66,7 +67,7 @@ function getRodShopText(user = null) {
     .map(rod => {
       const ownedMark = owned.includes(rod.id) ? ' ✅' : '';
       const price = rod.cost === 0 ? '免費' : `${rod.cost.toLocaleString('en-US')} 金幣`;
-      return `${rod.label}：${price}｜倍率 ${rod.multiplier}x${ownedMark}`;
+      return `${rod.label}：${price}｜${getRodEffectLabel(rod)}${ownedMark}`;
     })
     .join('\n');
 }

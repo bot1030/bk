@@ -8,7 +8,7 @@ const {
 } = require('discord.js');
 const fishingConfig = require('../config/fishingConfig');
 const { getOrCreateUser, spendCoins, addCoins, addJK } = require('../systems/economySystem');
-const { rollFishingResult } = require('../systems/fishingSystem');
+const { rollFishingResult, getRodEffectLabel } = require('../systems/fishingSystem');
 const { formatCoins, formatJK } = require('../utils/format');
 const prisma = require('../database/prisma');
 const { sendSpecialRewardAlert } = require('../systems/riskSystem');
@@ -97,7 +97,7 @@ async function executeFishing(interaction) {
       coins: totalCoins,
       detailLines: [
         `魚類：**${result.label}**`,
-        `使用釣竿：**${result.rod.label}** (${result.rod.multiplier}x)`,
+        `使用釣竿：**${result.rod.label}**`,
         result.treasure ? `寶箱額外獎勵：**${formatCoins(treasureCoins)}**` : null
       ].filter(Boolean)
     });
@@ -105,7 +105,8 @@ async function executeFishing(interaction) {
 
   const lines = [
     `你釣到了：**${result.label}**`,
-    `使用釣竿：**${result.rod.label}** (${result.rod.multiplier}x)`,
+    `使用釣竿：**${result.rod.label}**`,
+    `釣竿效果：**${getRodEffectLabel(result.rod)}**`,
     `自動出售價格：**${formatCoins(result.coins)}**`,
     `成本：**${formatCoins(fishingConfig.cost)}**`,
     `淨收益：**${formatCoins(totalCoins - fishingConfig.cost)}**`

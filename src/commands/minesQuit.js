@@ -1,45 +1,25 @@
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
-const prisma = require('../database/prisma');
-const { findActiveGame, buildMinesRows } = require('../systems/minesSystem');
-const { formatCoins } = require('../utils/format');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { findActiveGame } = require('../systems/minesSystem');
+const { quitGame } = require('./mines');
 
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 
-
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mines_quit')
-    .setDescription('退出目前的踩地雷遊戲，不會獲得獎勵'),
+    .setDescription('退出目前的踩地雷遊戲；建議直接使用遊戲介面的退出按鈕'),
 
   async execute(interaction) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const game = await findActiveGame(interaction.user.id);
 
     if (!game) {
-      return interaction.reply(privatePayload({ content: '❌ 你目前沒有進行中的踩地雷遊戲。' }));
+      return interaction.editReply({ content: '❌ 你目前沒有進行中的踩地雷遊戲。' });
     }
 
-    const updatedGame = await prisma.minesGame.update({
-      where: { id: game.id },
-      data: { status: 'QUIT', payout: 0 }
-    });
-
-    const embed = new EmbedBuilder()
-      .setColor(0x95a5a6)
-      .setTitle('🚪 已退出踩地雷')
-      .setDescription(`你放棄了本局遊戲，下注的 **${formatCoins(game.bet)}** 不會退回。`);
-
-    if (game.channelId && game.messageId) {
-      try {
-        const channel = await interaction.client.channels.fetch(game.channelId);
-        const message = await channel.messages.fetch(game.messageId);
-        await message.edit({ embeds: [embed], components: buildMinesRows(updatedGame, true) });
-      } catch {
-        // Ignore message edit failure.
-      }
-    }
-
-    return interaction.reply(privatePayload({ embeds: [embed] }));
+    return quitGame(interaction, game);
   }
 };

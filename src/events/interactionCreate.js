@@ -1,5 +1,5 @@
 const { MessageFlags } = require('discord.js');
-const { handlePanelButton, handlePanelModal } = require('../systems/gamePanelSystem');
+const { handlePanelButton, handlePanelModal, handlePanelSelect } = require('../systems/gamePanelSystem');
 
 module.exports = {
   name: 'interactionCreate',
@@ -33,6 +33,24 @@ module.exports = {
           if (!command || !command.handleButton) return;
           return command.handleButton(interaction);
         }
+
+        if (interaction.customId.startsWith('mines_action:')) {
+          const command = interaction.client.commands.get('mines');
+          if (!command || !command.handleActionButton) return;
+          return command.handleActionButton(interaction);
+        }
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId.startsWith('setup_select:')) {
+          return handlePanelSelect(interaction);
+        }
+
+        if (interaction.customId.startsWith('mines_select:')) {
+          const command = interaction.client.commands.get('mines');
+          if (!command || !command.handleSelect) return;
+          return command.handleSelect(interaction);
+        }
       }
 
       if (interaction.isModalSubmit()) {
@@ -41,6 +59,12 @@ module.exports = {
         }
       }
     } catch (error) {
+      // Do not crash the bot on expired/stale Discord interactions.
+      if (error?.code === 10062 || error?.code === 'InteractionNotReplied') {
+        console.warn('Ignored stale interaction:', error.message || error);
+        return;
+      }
+
       console.error(error);
 
       const payload = {

@@ -32,15 +32,33 @@ module.exports = {
     maxBet: 100000,
     gridSize: 25,
     rowSize: 5,
-    minMines: 7,
-    maxMines: 10,
-    maxSafePicksForMultiplier: 10,
-    // Balanced multipliers. Minimum 7 mines keeps the game risky, and all tables are below fair odds.
+    minMines: 5,
+    maxMines: 15,
+    maxSafePicksForMultiplier: 6,
+
+    // Conservative multipliers. Mines is designed with house edge, so it cannot become a cash printer.
     multipliers: {
-      7:  [1.10, 1.45, 1.95, 2.70, 3.85, 5.60, 8.40, 13.00, 21.00, 36.00],
-      8:  [1.15, 1.60, 2.25, 3.30, 5.00, 7.80, 12.50, 21.00, 38.00, 75.00],
-      9:  [1.20, 1.80, 2.80, 4.40, 7.20, 12.30, 22.00, 42.00, 88.00, 190.00],
-      10: [1.25, 2.00, 3.40, 6.00, 11.00, 22.00, 45.00, 95.00, 210.00, 480.00]
+      5:  [1.02, 1.08, 1.18, 1.32, 1.50, 1.75],
+      6:  [1.03, 1.11, 1.24, 1.42, 1.66, 1.95],
+      7:  [1.05, 1.16, 1.33, 1.56, 1.88, 2.28],
+      8:  [1.07, 1.22, 1.46, 1.78, 2.22, 2.82],
+      9:  [1.10, 1.30, 1.62, 2.05, 2.65, 3.45],
+      10: [1.14, 1.40, 1.82, 2.45, 3.35, 4.55],
+      11: [1.18, 1.52, 2.08, 2.95, 4.25, 6.00],
+      12: [1.23, 1.65, 2.38, 3.55, 5.25, 7.75],
+      13: [1.28, 1.80, 2.72, 4.25, 6.45, 9.80],
+      14: [1.32, 1.92, 2.95, 4.70, 7.35, 11.20],
+      15: [1.35, 2.00, 3.00, 4.50, 6.50, 9.50]
+    },
+
+    // Transparent anti-abuse control. If a player repeatedly wins high-bet Mines,
+    // the next high-bet Mines start is blocked temporarily instead of secretly rigging outcomes.
+    highBetStreakControl: {
+      enabled: true,
+      minBet: 30000,
+      maxBet: 100000,
+      winCount: 3,
+      windowMinutes: 30
     }
   }
 };

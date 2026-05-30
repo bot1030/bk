@@ -6,31 +6,57 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  MessageFlags
+  MessageFlags,
+  StringSelectMenuBuilder
 } = require('discord.js');
 const prisma = require('../database/prisma');
 const fishingConfig = require('../config/fishingConfig');
 const gamblingConfig = require('../config/gamblingConfig');
 const { rods } = require('../config/rodConfig');
-const { getFishingRewardListText, rollFishingResult } = require('./fishingSystem');
-const { getOrCreateUser, spendCoins, addCoins, addJK } = require('./economySystem');
+const { DAILY_REWARD_MIN, DAILY_REWARD_MAX, DAILY_COOLDOWN_MS } = require('../config/economyConfig');
+const { getFishingRewardListText, getRodEffectLabel } = require('./fishingSystem');
+const { getOrCreateUser, spendCoins, addCoins } = require('./economySystem');
+const { buyRod, selectRod, getRodShopText } = require('./rodSystem');
 const { rollCoinflipWithChoice, rollSlots, calculatePayout, faceLabel } = require('./gamblingSystem');
-const { checkGamblingBetAllowed, sendPostGameRiskAlert, sendSpecialRewardAlert } = require('./riskSystem');
+const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('./riskSystem');
 const { announceBigWin } = require('./bigWinSystem');
 const { validateBet } = require('../utils/guards');
-const { formatCoins, formatJK } = require('../utils/format');
+const { randomInt } = require('../utils/random');
+const { getRemainingCooldown } = require('../utils/cooldown');
+const { formatCoins, formatJK, formatDuration } = require('../utils/format');
+const { createConvertUi } = require('../commands/convert');
 const {
   createBoard,
-  buildMinesRows,
+  buildMinesComponents,
+  buildMinesBoardText,
   calculateMinesPayout,
   getMultiplier,
-  findActiveGame
+  findActiveGame,
+  parseJsonArray
 } = require('./minesSystem');
 
-
-const PRIVATE_REPLY = { flags: MessageFlags.Ephemeral };
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
+function replyPayload(payload = {}) {
+  const clean = { ...payload };
+  delete clean.flags;
+  return clean;
+}
+
+async function deferPrivate(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+}
+
+async function respondPrivate(interaction, payload = {}) {
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply(replyPayload(payload));
+  }
+
+  return interaction.reply(privatePayload(payload));
 }
 
 function parsePositiveInteger(raw) {
@@ -61,7 +87,7 @@ function buildFishConfirmButtons(userId) {
 function buildFishPanel() {
   const rodLines = Object.values(rods).map(rod => {
     const cost = rod.cost === 0 ? '免費' : formatCoins(rod.cost);
-    return `${rod.label}：${cost}｜釣魚收入 ${rod.multiplier}x`;
+    return `${rod.label}：${cost}｜${getRodEffectLabel(rod)}`;
   });
 
   const embed = new EmbedBuilder()
@@ -73,6 +99,8 @@ function buildFishPanel() {
       '📌 **規則**',
       `每次釣魚需要花費 **${formatCoins(fishingConfig.cost)}**。`,
       '魚類會自動出售成金幣，不需要手動賣魚。',
+      '釣竿不會直接提高「一定賺錢」的機率，而是提高較高級魚類與寶箱的出現傾向。',
+      '隱藏鑽石機率不受釣竿影響，避免 JK餘額 被過度農出來。',
       '釣魚有機率獲得寶箱或隱藏鑽石。',
       '',
       '🎁 **釣魚獎勵表**',
@@ -82,8 +110,8 @@ function buildFishPanel() {
       rodLines.join('\n'),
       '',
       '🛒 **如何購買釣竿**',
-      '使用 `/rod_shop` 查看、購買或選擇釣竿。',
-      '更高級的釣竿會提高魚類自動出售的金幣收入。'
+      '請到釣竿商店面板選擇購買或裝備釣竿。',
+      '管理員可使用 `/setup_fishrod` 建立釣竿商店面板。'
     ].join('\n'))
     .setFooter({ text: '獎勵機率不會公開顯示。' });
 
@@ -98,6 +126,115 @@ function buildFishPanel() {
   ];
 
   return { embeds: [embed], components };
+}
+
+function buildDailyPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle('🎁 每日獎勵')
+    .setDescription([
+      '每天可以領取一次金幣獎勵。',
+      '',
+      '📌 **規則**',
+      `獎勵範圍：**${formatCoins(DAILY_REWARD_MIN)}–${formatCoins(DAILY_REWARD_MAX)}**`,
+      '冷卻時間：**24 小時**',
+      '',
+      '🎮 **玩法**',
+      '點擊下方按鈕即可領取每日獎勵。',
+      '領取結果只會顯示給你自己。'
+    ].join('\n'));
+
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('setup_panel:daily:claim')
+        .setLabel('領取每日獎勵')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('🎁')
+    )
+  ];
+
+  return { embeds: [embed], components };
+}
+
+function buildConvertPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle('🔁 貨幣兌換')
+    .setDescription([
+      '在金幣與 JK餘額之間進行兌換。',
+      '',
+      '💱 **兌換比例**',
+      '**1,000 金幣 = 1 JK餘額**',
+      '**1 JK餘額 = 1,000 金幣**',
+      '',
+      '🎮 **玩法**',
+      '點擊下方按鈕後，輸入你要兌換的數量。',
+      '系統會開啟私人兌換介面，讓你選擇「把什麼貨幣」換成「什麼貨幣」。',
+      '',
+      '⚠️ 金幣換成 JK餘額時，金幣數量必須是 1,000 的倍數。'
+    ].join('\n'));
+
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('setup_panel:convert:start')
+        .setLabel('開始兌換')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('🔁')
+    )
+  ];
+
+  return { embeds: [embed], components };
+}
+
+function buildFishrodPanel() {
+  const buyMenu = new StringSelectMenuBuilder()
+    .setCustomId('setup_panel_select:fishrod:buy')
+    .setPlaceholder('選擇要購買的釣竿')
+    .addOptions(
+      Object.values(rods).map(rod => ({
+        label: rod.label,
+        value: rod.id,
+        description: `${rod.cost === 0 ? '免費' : `${rod.cost.toLocaleString('en-US')} 金幣`}｜提高高級魚傾向`
+      }))
+    );
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('setup_panel_select:fishrod:select')
+    .setPlaceholder('選擇要裝備的釣竿')
+    .addOptions(
+      Object.values(rods).map(rod => ({
+        label: rod.label,
+        value: rod.id,
+        description: `裝備後提高高級魚類出現傾向`
+      }))
+    );
+
+  const embed = new EmbedBuilder()
+    .setColor(0x1abc9c)
+    .setTitle('🪵 釣竿商店')
+    .setDescription([
+      '使用下方選單購買或裝備釣竿。',
+      '',
+      '🛒 **釣竿價格與效果**',
+      getRodShopText(),
+      '',
+      '📌 **規則**',
+      '購買釣竿後會自動裝備。',
+      '更高級的釣竿不會直接提高每次釣魚的成功率。',
+      '它會提高較高級魚類與寶箱的出現傾向。',
+      '隱藏鑽石機率不受釣竿影響。',
+      '購買與裝備結果只會顯示給你自己。'
+    ].join('\n'));
+
+  return {
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(buyMenu),
+      new ActionRowBuilder().addComponents(selectMenu)
+    ]
+  };
 }
 
 function buildCoinflipPanel() {
@@ -170,7 +307,7 @@ function buildSlotsPanel() {
 
 function buildMinesPanel() {
   const multiplierLines = Object.entries(gamblingConfig.mines.multipliers)
-    .map(([mineCount, table]) => `${mineCount} 顆地雷：${table.slice(0, 5).map(x => `${x}x`).join(' / ')} ...`);
+    .map(([mineCount, table]) => `${mineCount} 顆地雷：${table.map(x => `${x}x`).join(' / ')}`);
 
   const embed = new EmbedBuilder()
     .setColor(0xe74c3c)
@@ -185,14 +322,14 @@ function buildMinesPanel() {
       '點到安全格會提高目前可提現倍率。',
       '踩到地雷則失去本局下注。',
       '',
-      '💰 **如何提現**',
-      '遊戲開始後，使用 `/mines_cashout` 提現。',
-      '如果想放棄本局，使用 `/mines_quit`。',
+      '💰 **如何提現 / 退出**',
+      '遊戲開始後，遊戲介面內會有「提現」與「退出」按鈕。',
+      '不需要再另外輸入 `/mines_cashout` 或 `/mines_quit`。',
       '',
       '📊 **倍率參考**',
       multiplierLines.join('\n'),
       '',
-      '⚠️ 地雷數量最低為 7 顆，倍率已調低，避免變成洗錢/印鈔機。'
+      `⚠️ 倍率最多計算前 ${gamblingConfig.mines.maxSafePicksForMultiplier} 次安全點擊，避免變成印鈔機。`
     ].join('\n'))
     .setFooter({ text: '實際地雷位置不會公開。' });
 
@@ -212,35 +349,75 @@ function buildMinesPanel() {
 async function sendSetupPanel(interaction, channel, type) {
   const panelBuilders = {
     fish: buildFishPanel,
+    daily: buildDailyPanel,
+    convert: buildConvertPanel,
+    fishrod: buildFishrodPanel,
     coinflip: buildCoinflipPanel,
     slots: buildSlotsPanel,
     mines: buildMinesPanel
   };
 
-  const panel = panelBuilders[type]();
+  const panelBuilder = panelBuilders[type];
+  if (!panelBuilder) return interaction.reply(privatePayload({ content: '❌ 無效的面板類型。' }));
+
+  const panel = panelBuilder();
   await channel.send(panel);
 
   const labels = {
     fish: '釣魚系統',
+    daily: '每日獎勵',
+    convert: '貨幣兌換',
+    fishrod: '釣竿商店',
     coinflip: '硬幣翻轉',
     slots: '老虎機',
     mines: '踩地雷'
   };
 
   return interaction.reply(privatePayload({
-    content: `✅ 已在 ${channel} 建立 **${labels[type]}** 遊戲面板。`
+    content: `✅ 已在 ${channel} 建立 **${labels[type]}** 面板。`
   }));
 }
 
+async function claimDailyFromPanel(interaction) {
+  const user = await getOrCreateUser(interaction.user);
+  const remaining = getRemainingCooldown(user.lastDaily, DAILY_COOLDOWN_MS);
+
+  if (remaining > 0) {
+    const embed = new EmbedBuilder()
+      .setColor(0xe67e22)
+      .setTitle('⏰ 每日獎勵冷卻中')
+      .setDescription(`你已經領取過每日獎勵了。\n請在 **${formatDuration(remaining)}** 後再試一次。`);
+
+    return interaction.reply(privatePayload({ embeds: [embed] }));
+  }
+
+  const reward = randomInt(DAILY_REWARD_MIN, DAILY_REWARD_MAX);
+  await addCoins(interaction.user, reward, 'DAILY', '每日獎勵');
+
+  await prisma.user.update({
+    where: { discordId: interaction.user.id },
+    data: { lastDaily: new Date() }
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle('🎁 每日獎勵')
+    .setDescription(`你獲得了 **${formatCoins(reward)}**！\n明天再回來領取獎勵。`);
+
+  return interaction.reply(privatePayload({ embeds: [embed] }));
+}
+
 async function executeCoinflipFromPanel(interaction, choice, bet) {
+  await deferPrivate(interaction);
+
   const check = validateBet(bet, gamblingConfig.coinflip.minBet, gamblingConfig.coinflip.maxBet);
-  if (!check.ok) return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
+  if (!check.ok) return respondPrivate(interaction, { content: `❌ ${check.message}` });
 
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
-  if (!risk.ok) return interaction.reply(privatePayload({ content: risk.message }));
+  if (!risk.ok) return respondPrivate(interaction, { content: risk.message });
 
   const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉下注');
-  if (!spent.ok) return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
+  if (!spent.ok) return respondPrivate(interaction, { content: '❌ 你的金幣不足。' });
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -278,7 +455,6 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
     .setColor(result.won ? 0x2ecc71 : 0xe74c3c)
     .setTitle('🪙 硬幣翻轉')
     .setDescription([
-      `玩家：<@${interaction.user.id}>`,
       `下注金額：**${formatCoins(bet)}**`,
       `你的選擇：**${result.choiceLabel}**`,
       `硬幣結果：**${result.resultLabel}**`,
@@ -287,18 +463,20 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
       result.won ? `你獲得了 **${formatCoins(payout)}**。` : `你失去了 **${formatCoins(bet)}**。`
     ].join('\n'));
 
-  return interaction.reply(privatePayload({ embeds: [embed] }));
+  return respondPrivate(interaction, { embeds: [embed] });
 }
 
 async function executeSlotsFromPanel(interaction, bet) {
+  await deferPrivate(interaction);
+
   const check = validateBet(bet, gamblingConfig.slots.minBet, gamblingConfig.slots.maxBet);
-  if (!check.ok) return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
+  if (!check.ok) return respondPrivate(interaction, { content: `❌ ${check.message}` });
 
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
-  if (!risk.ok) return interaction.reply(privatePayload({ content: risk.message }));
+  if (!risk.ok) return respondPrivate(interaction, { content: risk.message });
 
   const spent = await spendCoins(interaction.user, bet, 'SLOTS', '老虎機下注');
-  if (!spent.ok) return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
+  if (!spent.ok) return respondPrivate(interaction, { content: '❌ 你的金幣不足。' });
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -336,7 +514,6 @@ async function executeSlotsFromPanel(interaction, bet) {
     .setColor(payout > 0 ? 0x2ecc71 : 0xe74c3c)
     .setTitle('🎰 老虎機')
     .setDescription([
-      `玩家：<@${interaction.user.id}>`,
       `下注金額：**${formatCoins(bet)}**`,
       '',
       `結果：**${visual.join(' | ')}**`,
@@ -346,11 +523,11 @@ async function executeSlotsFromPanel(interaction, bet) {
       `獲得：**${formatCoins(payout)}**`
     ].join('\n'));
 
-  return interaction.reply(privatePayload({ embeds: [embed] }));
+  return respondPrivate(interaction, { embeds: [embed] });
 }
 
 function buildMinesEmbed(game, title = '💣 踩地雷') {
-  const revealed = Array.isArray(game.revealed) ? game.revealed : JSON.parse(game.revealed);
+  const revealed = parseJsonArray(game.revealed);
   const safePicks = revealed.length;
   const multiplier = getMultiplier(game.mines, safePicks);
   const currentPayout = safePicks > 0 ? calculateMinesPayout(game.bet, game.mines, safePicks) : 0;
@@ -359,75 +536,49 @@ function buildMinesEmbed(game, title = '💣 踩地雷') {
     .setColor(0xf39c12)
     .setTitle(title)
     .setDescription([
-      `玩家：<@${game.user?.discordId || '未知'}>`,
       `下注金額：**${formatCoins(game.bet)}**`,
       `地雷數量：**${game.mines}**`,
       `安全點擊：**${safePicks}**`,
       `目前倍率：**${multiplier}x**`,
       `目前可提現：**${formatCoins(currentPayout)}**`,
+      `倍率最多計算前 **${gamblingConfig.mines.maxSafePicksForMultiplier} 次安全點擊**。`,
       '',
-      '點擊格子繼續遊戲。若要提現，請使用 `/mines_cashout`。'
+      '```',
+      buildMinesBoardText(game),
+      '```',
+      '直接點擊格子進行遊戲。提現 / 退出按鈕會顯示在下方控制列。'
     ].join('\n'));
 }
 
 async function executeMinesFromPanel(interaction, bet, mineCount) {
-  const existing = await findActiveGame(interaction.user.id);
-  if (existing) {
-    return interaction.reply(privatePayload({
-      content: '❌ 你已經有一場進行中的踩地雷遊戲。請先使用 `/mines_cashout` 提現，或使用 `/mines_quit` 退出。'
-    }));
-  }
-
-  const check = validateBet(bet, gamblingConfig.mines.minBet, gamblingConfig.mines.maxBet);
-  if (!check.ok) return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
-
-  if (mineCount < gamblingConfig.mines.minMines || mineCount > gamblingConfig.mines.maxMines) {
-    return interaction.reply(privatePayload({ content: `❌ 地雷數量必須是 ${gamblingConfig.mines.minMines}–${gamblingConfig.mines.maxMines} 顆。` }));
-  }
-
-  const risk = await checkGamblingBetAllowed(interaction.user, bet);
-  if (!risk.ok) return interaction.reply(privatePayload({ content: risk.message }));
-
-  const spent = await spendCoins(interaction.user, bet, 'MINES', '踩地雷下注');
-  if (!spent.ok) return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
-
-  const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
-
-  const game = await prisma.minesGame.create({
-    data: {
-      userId: user.id,
-      bet,
-      mines: mineCount,
-      board: createBoard(mineCount),
-      revealed: [],
-      status: 'ACTIVE'
-    },
-    include: { user: true }
-  });
-
-  await prisma.user.update({
-    where: { discordId: interaction.user.id },
-    data: { minesPlayed: { increment: 1 } }
-  });
-
-  await interaction.reply(privatePayload({
-    embeds: [buildMinesEmbed(game)],
-    components: buildMinesRows(game)
-  }));
-
-  const message = await interaction.fetchReply();
-
-  await prisma.minesGame.update({
-    where: { id: game.id },
-    data: {
-      messageId: message.id,
-      channelId: message.channelId
-    }
-  });
+  // Use the real Mines command engine so panel-started games and /mines games behave exactly the same.
+  // This avoids duplicated logic and prevents Unknown Interaction errors by deferring immediately inside startMinesGame().
+  const minesCommand = require('../commands/mines');
+  return minesCommand.startMinesGame(interaction, bet, mineCount);
 }
 
 async function handlePanelButton(interaction) {
   const [, game, action] = interaction.customId.split(':');
+
+  if (game === 'daily' && action === 'claim') {
+    return claimDailyFromPanel(interaction);
+  }
+
+  if (game === 'convert' && action === 'start') {
+    const modal = new ModalBuilder()
+      .setCustomId('setup_modal:convert:start')
+      .setTitle('貨幣兌換｜輸入兌換數量');
+
+    const amountInput = new TextInputBuilder()
+      .setCustomId('amount')
+      .setLabel('請輸入要兌換的數量')
+      .setPlaceholder('例如：1000 或 5')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
+    return interaction.showModal(modal);
+  }
 
   if (game === 'fish' && action === 'start') {
     const embed = new EmbedBuilder()
@@ -507,8 +658,42 @@ async function handlePanelButton(interaction) {
   }
 }
 
+async function handlePanelSelect(interaction) {
+  const [, game, action] = interaction.customId.split(':');
+
+  if (game !== 'fishrod') return;
+
+  const rodId = interaction.values[0];
+
+  if (action === 'buy') {
+    const result = await buyRod(interaction.user, rodId);
+    if (!result.ok) return interaction.reply(privatePayload({ content: `❌ ${result.message}` }));
+
+    return interaction.reply(privatePayload({
+      content: `✅ 你已購買並裝備 **${result.rod.label}**。\n效果：**${getRodEffectLabel(result.rod)}**`
+    }));
+  }
+
+  if (action === 'select') {
+    const result = await selectRod(interaction.user, rodId);
+    if (!result.ok) return interaction.reply(privatePayload({ content: `❌ ${result.message}` }));
+
+    return interaction.reply(privatePayload({
+      content: `✅ 你已裝備 **${result.rod.label}**。\n效果：**${getRodEffectLabel(result.rod)}**`
+    }));
+  }
+}
+
 async function handlePanelModal(interaction) {
   const [, game, action] = interaction.customId.split(':');
+
+  if (game === 'convert') {
+    const amount = parsePositiveInteger(interaction.fields.getTextInputValue('amount'));
+    if (!amount) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的兌換數量。' }));
+
+    const ui = createConvertUi(interaction.user.id, amount);
+    return interaction.reply(privatePayload(ui));
+  }
 
   if (game === 'coinflip') {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
@@ -536,8 +721,12 @@ async function handlePanelModal(interaction) {
 module.exports = {
   sendSetupPanel,
   handlePanelButton,
+  handlePanelSelect,
   handlePanelModal,
   buildFishPanel,
+  buildDailyPanel,
+  buildConvertPanel,
+  buildFishrodPanel,
   buildCoinflipPanel,
   buildSlotsPanel,
   buildMinesPanel
