@@ -1,7 +1,7 @@
 {
   "name": "jk-discord-bot",
   "version": "1.0.0",
-  "description": "Discord economy bot with Coins, JK餘額, fishing, gambling, and leaderboards.",
+  "description": "Discord economy bot with Coins, JK餘額, fishing, gambling, setup panels, and leaderboards.",
   "main": "src/index.js",
   "type": "commonjs",
   "engines": {

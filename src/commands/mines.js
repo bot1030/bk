@@ -36,7 +36,7 @@ function buildMinesEmbed(game, title = '💣 踩地雷') {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mines')
-    .setDescription('遊玩 5x5 踩地雷遊戲')
+    .setDescription('遊玩 5x5 踩地雷遊戲，地雷數量限制為 7–10')
     .addIntegerOption(option =>
       option
         .setName('bet')
@@ -48,7 +48,7 @@ module.exports = {
     .addIntegerOption(option =>
       option
         .setName('mines')
-        .setDescription('地雷數量：1–10')
+        .setDescription('地雷數量：7–10')
         .setRequired(true)
         .setMinValue(gamblingConfig.mines.minMines)
         .setMaxValue(gamblingConfig.mines.maxMines)
