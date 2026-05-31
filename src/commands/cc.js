@@ -82,6 +82,17 @@ module.exports = {
           `玩家花費：**${formatCoins(stats.rods.coinsSpent)}**`
         ].join('\n'),
         inline: false
+      },
+
+      {
+        name: '⚠️ 倍投法風險控管',
+        value: [
+          `觸發玩家：**${formatNumber(stats.antiMartingale.players)}**`,
+          `限制玩家：**${formatNumber(stats.antiMartingale.players)}**`,
+          `限制紀錄：**${formatNumber(stats.antiMartingale.blocks)}**`,
+          `限制紀錄：**0 金幣**`
+        ].join('\n'),
+        inline: false
       }
     );
 

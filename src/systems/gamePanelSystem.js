@@ -325,6 +325,7 @@ function buildMinesPanel() {
       '💰 **如何提現 / 退出**',
       '遊戲開始後，遊戲介面內會有「提現」與「退出」按鈕。',
       '不需要再另外輸入 `/mines_cashout` 或 `/mines_quit`。',
+      '如果玩家卡住或想停止所有局，可以點擊「結束我的遊戲並退回本金」。',
       '',
       '📊 **倍率參考**',
       multiplierLines.join('\n'),
@@ -339,7 +340,12 @@ function buildMinesPanel() {
         .setCustomId('setup_panel:mines:start')
         .setLabel('開始踩地雷')
         .setStyle(ButtonStyle.Success)
-        .setEmoji('💣')
+        .setEmoji('💣'),
+      new ButtonBuilder()
+        .setCustomId('setup_panel:mines:force_end_all')
+        .setLabel('結束我的遊戲並退回本金')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🧯')
     )
   ];
 
@@ -628,6 +634,11 @@ async function handlePanelButton(interaction) {
 
     modal.addComponents(new ActionRowBuilder().addComponents(betInput));
     return interaction.showModal(modal);
+  }
+
+  if (game === 'mines' && action === 'force_end_all') {
+    const minesCommand = require('../commands/mines');
+    return minesCommand.refundAllActiveGames(interaction);
   }
 
   if (game === 'mines' && action === 'start') {

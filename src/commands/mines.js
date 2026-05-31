@@ -238,6 +238,55 @@ async function quitGame(interaction, game) {
   });
 }
 
+
+async function refundAllActiveGames(interaction) {
+  await ensurePrivateReply(interaction);
+
+  const activeGames = await prisma.minesGame.findMany({
+    where: {
+      user: { discordId: interaction.user.id },
+      status: 'ACTIVE'
+    },
+    include: { user: true },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (!activeGames.length) {
+    return sendOrEditPrivate(interaction, {
+      content: '❌ 你目前沒有正在進行中的踩地雷遊戲。'
+    });
+  }
+
+  const totalRefund = activeGames.reduce((sum, game) => sum + Number(game.bet || 0), 0);
+  const ids = activeGames.map(game => game.id);
+
+  await prisma.minesGame.updateMany({
+    where: { id: { in: ids } },
+    data: { status: 'FORCE_REFUNDED', payout: 0 }
+  });
+
+  if (totalRefund > 0) {
+    await addCoins(interaction.user, totalRefund, 'MINES', '強制結束所有踩地雷遊戲退回本金');
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x95a5a6)
+    .setTitle('🧯 已結束所有踩地雷遊戲')
+    .setDescription([
+      `已結束遊戲數量：**${activeGames.length}**`,
+      `退回本金總額：**${formatCoins(totalRefund)}**`,
+      '',
+      '本操作只退回本金，不會給予任何額外獎勵。',
+      '舊的踩地雷按鈕會自動失效。'
+    ].join('\n'));
+
+  return sendOrEditPrivate(interaction, {
+    content: null,
+    embeds: [embed],
+    components: []
+  });
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mines')
@@ -382,6 +431,7 @@ module.exports = {
     const game = await getGameById(gameId);
     if (!(await validateGameOwnership(interaction, game))) return;
 
+    if (action === 'force_all') return refundAllActiveGames(interaction);
     if (action === 'cashout') return cashOutGame(interaction, game);
     if (action === 'quit') return quitGame(interaction, game);
 
@@ -391,5 +441,6 @@ module.exports = {
   startMinesGame,
   buildMinesEmbed,
   cashOutGame,
-  quitGame
+  quitGame,
+  refundAllActiveGames
 };

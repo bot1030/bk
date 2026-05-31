@@ -190,6 +190,21 @@ function aggregateRodPurchases(transactions) {
   return { players: players.size, purchases, coinsSpent };
 }
 
+
+function aggregateAntiMartingale(transactions) {
+  const players = new Set();
+  let blocks = 0;
+
+  for (const tx of transactions) {
+    if (tx.type !== 'ANTI_MARTINGALE_BLOCK') continue;
+    const userId = tx.user?.discordId;
+    if (userId) players.add(userId);
+    blocks += 1;
+  }
+
+  return { players: players.size, blocks };
+}
+
 async function getCasinoControlStats() {
   const transactions = await prisma.transaction.findMany({
     where: {
@@ -219,6 +234,7 @@ async function getCasinoControlStats() {
   const daily = aggregateDaily(transactions);
   const convert = aggregateConvert(transactions);
   const rods = aggregateRodPurchases(transactions);
+  const antiMartingale = aggregateAntiMartingale(transactions);
 
   const totalCasinoProfit = gameStats.reduce((sum, game) => sum + game.casinoProfit, 0);
   const totalPlayers = new Set();
@@ -235,7 +251,8 @@ async function getCasinoControlStats() {
     games: gameStats,
     daily,
     convert,
-    rods
+    rods,
+    antiMartingale
   };
 }
 

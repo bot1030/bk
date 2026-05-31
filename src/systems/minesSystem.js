@@ -139,6 +139,12 @@ function buildMinesControlComponents(game, forceDisabled = false) {
         .setLabel('退出並退回本金')
         .setEmoji('🚪')
         .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!active),
+      new ButtonBuilder()
+        .setCustomId(`mines_action:force_all:${game.id}`)
+        .setLabel('結束所有遊戲並退回本金')
+        .setEmoji('🧯')
+        .setStyle(ButtonStyle.Danger)
         .setDisabled(!active)
     )
   ];

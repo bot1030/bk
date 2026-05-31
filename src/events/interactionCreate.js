@@ -8,60 +8,55 @@ module.exports = {
       if (interaction.isChatInputCommand()) {
         const command = interaction.client.commands.get(interaction.commandName);
         if (!command) return;
-        return command.execute(interaction);
+        return await command.execute(interaction);
       }
 
       if (interaction.isButton()) {
         if (interaction.customId.startsWith('setup_panel:')) {
-          return handlePanelButton(interaction);
+          return await handlePanelButton(interaction);
         }
 
         if (interaction.customId.startsWith('convert:')) {
           const command = interaction.client.commands.get('兌換');
           if (!command || !command.handleButton) return;
-          return command.handleButton(interaction);
+          return await command.handleButton(interaction);
         }
 
         if (interaction.customId.startsWith('fish:')) {
           const command = interaction.client.commands.get('fish');
           if (!command || !command.handleButton) return;
-          return command.handleButton(interaction);
+          return await command.handleButton(interaction);
         }
 
         if (interaction.customId.startsWith('mines_pick:')) {
           const command = interaction.client.commands.get('mines');
           if (!command || !command.handleButton) return;
-          return command.handleButton(interaction);
+          return await command.handleButton(interaction);
         }
 
         if (interaction.customId.startsWith('mines_action:')) {
           const command = interaction.client.commands.get('mines');
           if (!command || !command.handleActionButton) return;
-          return command.handleActionButton(interaction);
+          return await command.handleActionButton(interaction);
         }
       }
 
       if (interaction.isStringSelectMenu()) {
-        if (interaction.customId.startsWith('setup_select:')) {
-          return handlePanelSelect(interaction);
-        }
-
-        if (interaction.customId.startsWith('mines_select:')) {
-          const command = interaction.client.commands.get('mines');
-          if (!command || !command.handleSelect) return;
-          return command.handleSelect(interaction);
+        if (interaction.customId.startsWith('setup_panel_select:')) {
+          return await handlePanelSelect(interaction);
         }
       }
 
       if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('setup_modal:')) {
-          return handlePanelModal(interaction);
+          return await handlePanelModal(interaction);
         }
       }
     } catch (error) {
-      // Do not crash the bot on expired/stale Discord interactions.
-      if (error?.code === 10062 || error?.code === 'InteractionNotReplied') {
-        console.warn('Ignored stale interaction:', error.message || error);
+      // 10062 normally means the interaction token already expired or another bot instance answered it.
+      // Do not crash the bot for this; just log the concise reason.
+      if (error?.code === 10062) {
+        console.warn('⚠️ Discord interaction expired or was already handled. Avoid running Railway and local bot at the same time.');
         return;
       }
 
