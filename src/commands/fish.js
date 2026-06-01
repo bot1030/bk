@@ -7,9 +7,10 @@ const {
   MessageFlags
 } = require('discord.js');
 const fishingConfig = require('../config/fishingConfig');
-const { getOrCreateUser, spendCoins, addCoins, addJK } = require('../systems/economySystem');
+const { getOrCreateUser, addCoins, addJK } = require('../systems/economySystem');
 const { rollFishingResult, getRodEffectLabel } = require('../systems/fishingSystem');
-const { formatCoins, formatJK } = require('../utils/format');
+const { formatCoins, formatJK, formatDuration } = require('../utils/format');
+const { getRemainingCooldown } = require('../utils/cooldown');
 const prisma = require('../database/prisma');
 const { sendSpecialRewardAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
@@ -17,7 +18,6 @@ const { announceBigWin } = require('../systems/bigWinSystem');
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
-
 
 function buildConfirmButtons(userId) {
   return [
@@ -31,26 +31,41 @@ function buildConfirmButtons(userId) {
         .setCustomId(`fish:cancel:${userId}`)
         .setLabel('取消')
         .setStyle(ButtonStyle.Secondary)
+        .setEmoji('❌')
     )
   ];
 }
 
+function getFishCooldownRemaining(user) {
+  return getRemainingCooldown(user.lastFish, fishingConfig.cooldownMs);
+}
+
 async function executeFishing(interaction) {
-  const spent = await spendCoins(interaction.user, fishingConfig.cost, 'FISHING', '釣魚成本');
-  if (!spent.ok) {
-    return interaction.editReply({
-      content: '❌ 你的金幣不足，無法釣魚。',
-      embeds: [],
-      components: []
-    });
+  const userBefore = await getOrCreateUser(interaction.user);
+  const remaining = getFishCooldownRemaining(userBefore);
+
+  if (remaining > 0) {
+    const embed = new EmbedBuilder()
+      .setColor(0xe67e22)
+      .setTitle('⏰ 釣魚冷卻中')
+      .setDescription([
+        '你剛剛已經釣過魚了。',
+        `請在 **${formatDuration(remaining)}** 後再來釣魚。`,
+        '',
+        '每次釣魚是免費的，但冷卻時間為 **1 小時 30 分鐘**。'
+      ].join('\n'));
+
+    return interaction.editReply({ embeds: [embed], components: [], content: null });
   }
 
-  const user = await getOrCreateUser(interaction.user);
-  const result = rollFishingResult(user);
+  const result = rollFishingResult(userBefore);
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
-    data: { fishingCount: { increment: 1 } }
+    data: {
+      fishingCount: { increment: 1 },
+      lastFish: new Date()
+    }
   });
 
   if (result.type === 'hidden_diamond') {
@@ -68,7 +83,7 @@ async function executeFishing(interaction) {
       isHiddenDiamond: true,
       detailLines: [
         '玩家釣到了 **隱藏鑽石**！',
-        `本次釣魚成本：**${formatCoins(fishingConfig.cost)}**`
+        '本次釣魚成本：**免費**'
       ]
     });
 
@@ -79,7 +94,8 @@ async function executeFishing(interaction) {
         '你發現了極其稀有的 **隱藏鑽石**！',
         `你獲得了 **${formatJK(result.jk)}**。`,
         '',
-        `本次釣魚成本：${formatCoins(fishingConfig.cost)}`
+        '本次釣魚成本：**免費**',
+        '下一次釣魚冷卻：**1 小時 30 分鐘**'
       ].join('\n'));
 
     return interaction.editReply({ embeds: [embed], components: [], content: null });
@@ -106,10 +122,12 @@ async function executeFishing(interaction) {
   const lines = [
     `你釣到了：**${result.label}**`,
     `使用釣竿：**${result.rod.label}**`,
-    `釣竿效果：**${getRodEffectLabel(result.rod)}**`,
+    `釣竿效果：**${getRodEffectLabel ? getRodEffectLabel(result.rod) : '提高高級魚類機率'}**`,
     `自動出售價格：**${formatCoins(result.coins)}**`,
-    `成本：**${formatCoins(fishingConfig.cost)}**`,
-    `淨收益：**${formatCoins(totalCoins - fishingConfig.cost)}**`
+    '成本：**免費**',
+    `本次獲得：**${formatCoins(totalCoins)}**`,
+    '',
+    '下一次釣魚冷卻：**1 小時 30 分鐘**'
   ];
 
   if (result.treasure) {
@@ -127,15 +145,33 @@ async function executeFishing(interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('fish')
-    .setDescription('花費 20 金幣釣魚並獲得隨機獎勵'),
+    .setDescription('免費釣魚並獲得隨機獎勵，冷卻時間為 1 小時 30 分鐘'),
 
   async execute(interaction) {
+    const user = await getOrCreateUser(interaction.user);
+    const remaining = getFishCooldownRemaining(user);
+
+    if (remaining > 0) {
+      const embed = new EmbedBuilder()
+        .setColor(0xe67e22)
+        .setTitle('⏰ 釣魚冷卻中')
+        .setDescription(`請在 **${formatDuration(remaining)}** 後再來釣魚。`);
+
+      return interaction.reply(privatePayload({ embeds: [embed] }));
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
       .setTitle('🎣 釣魚確認')
-      .setDescription(`每次釣魚需要花費 **${formatCoins(fishingConfig.cost)}**。\n魚類會自動出售成金幣。\n你確定要開始釣魚嗎？`);
+      .setDescription([
+        '本次釣魚成本：**免費**',
+        '冷卻時間：**1 小時 30 分鐘**',
+        '魚類會自動出售成金幣。',
+        '',
+        '你確定要開始釣魚嗎？'
+      ].join('\n'));
 
-    await interaction.reply(privatePayload({
+    return interaction.reply(privatePayload({
       embeds: [embed],
       components: buildConfirmButtons(interaction.user.id)
     }));
@@ -160,5 +196,7 @@ module.exports = {
       await interaction.deferUpdate();
       return executeFishing(interaction);
     }
-  }
+  },
+
+  executeFishing
 };

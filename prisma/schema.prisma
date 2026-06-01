@@ -14,6 +14,7 @@ model User {
   coins          Int           @default(0)
   jkBalance      Int           @default(0)
   lastDaily      DateTime?
+  lastFish       DateTime?
   selectedRod    String        @default("basic")
   ownedRods      Json          @default("[\"basic\"]")
   fishingCount   Int           @default(0)
@@ -61,7 +62,6 @@ model LeaderboardCache {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
 
 model GuildConfig {
   id                  String   @id @default(cuid())

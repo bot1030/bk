@@ -87,7 +87,7 @@ function buildFishConfirmButtons(userId) {
 function buildFishPanel() {
   const rodLines = Object.values(rods).map(rod => {
     const cost = rod.cost === 0 ? '免費' : formatCoins(rod.cost);
-    return `${rod.label}：${cost}｜${getRodEffectLabel(rod)}`;
+    return `${rod.label}：${cost}｜${getRodEffectLabel ? getRodEffectLabel(rod) : '提高高級魚類機率'}`;
   });
 
   const embed = new EmbedBuilder()
@@ -97,7 +97,8 @@ function buildFishPanel() {
       '點擊下方綠色按鈕即可開始釣魚確認。',
       '',
       '📌 **規則**',
-      `每次釣魚需要花費 **${formatCoins(fishingConfig.cost)}**。`,
+      '每次釣魚成本：**免費**',
+      '冷卻時間：**1 小時 30 分鐘**',
       '魚類會自動出售成金幣，不需要手動賣魚。',
       '釣竿不會直接提高「一定賺錢」的機率，而是提高較高級魚類與寶箱的出現傾向。',
       '隱藏鑽石機率不受釣竿影響，避免 JK餘額 被過度農出來。',
@@ -591,7 +592,8 @@ async function handlePanelButton(interaction) {
       .setColor(0x3498db)
       .setTitle('🎣 釣魚確認')
       .setDescription([
-        `每次釣魚需要花費 **${formatCoins(fishingConfig.cost)}**。`,
+        '本次釣魚成本：**免費**',
+        '冷卻時間：**1 小時 30 分鐘**',
         '魚類會自動出售成金幣。',
         '',
         '你確定要開始釣魚嗎？'
