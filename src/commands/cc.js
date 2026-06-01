@@ -37,8 +37,11 @@ module.exports = {
       .setDescription([
         `統計範圍：**全部資料**`,
         `排除使用者：**${EXCLUDED_USER_IDS.join(', ')}**`,
-        `有效玩家數：**${formatNumber(stats.totalPlayers)}**`,
-        `交易紀錄數：**${formatNumber(stats.totalTransactions)}**`,
+        `有效玩家數：**${formatNumber(stats.includedUserCount)}**`,
+        `有效交易紀錄數：**${formatNumber(stats.totalTransactions)}**`,
+        '',
+        `遊戲與釣竿淨利：**${formatCoins(stats.totalCasinoProfitBeforeOperatingLosses)}**`,
+        `營運發放成本：**-${formatCoins(stats.operatingLosses.totalLoss)}**`,
         `賭場總淨利：**${formatCoins(stats.totalCasinoProfit)}**`
       ].join('\n'))
       .setFooter({ text: '資料不包含管理員與指定排除使用者。正數代表賭場賺，負數代表玩家整體賺。' })
@@ -53,6 +56,16 @@ module.exports = {
     }
 
     embed.addFields(
+      {
+        name: '🏦 營運發放成本',
+        value: [
+          `新玩家起始金幣：**${formatNumber(stats.operatingLosses.startingBonusUsers)} 人 × ${formatCoins(stats.operatingLosses.startingBonusPerUser)} = ${formatCoins(stats.operatingLosses.startingBonusLoss)}**`,
+          `每日獎勵發放：**${formatCoins(stats.operatingLosses.dailyLoss)}**`,
+          `管理員新增發放：**${formatCoins(stats.operatingLosses.adminGiveawayLoss)}**`,
+          `總發放成本：**${formatCoins(stats.operatingLosses.totalLoss)}**`
+        ].join('\n'),
+        inline: false
+      },
       {
         name: '🎁 每日獎勵',
         value: [
@@ -79,18 +92,28 @@ module.exports = {
         value: [
           `購買玩家：**${formatNumber(stats.rods.players)}**`,
           `購買次數：**${formatNumber(stats.rods.purchases)}**`,
-          `玩家花費：**${formatCoins(stats.rods.coinsSpent)}**`
+          `玩家花費：**${formatCoins(stats.rods.coinsSpent)}**`,
+          `計入賭場收入：**+${formatCoins(stats.rodCasinoProfit)}**`
         ].join('\n'),
         inline: false
       },
-
+      {
+        name: '🛠️ 管理員新增發放',
+        value: [
+          `收到玩家：**${formatNumber(stats.adminGiveaways.players)}**`,
+          `發放筆數：**${formatNumber(stats.adminGiveaways.entries)}**`,
+          `金幣發放：**${formatCoins(stats.adminGiveaways.coinsPaid)}**`,
+          `JK發放：**${formatJK(stats.adminGiveaways.jkPaid)}**`,
+          `折算總成本：**${formatCoins(stats.adminGiveaways.coinValuePaid)}**`
+        ].join('\n'),
+        inline: false
+      },
       {
         name: '⚠️ 倍投法風險控管',
         value: [
           `觸發玩家：**${formatNumber(stats.antiMartingale.players)}**`,
           `限制玩家：**${formatNumber(stats.antiMartingale.players)}**`,
-          `限制紀錄：**${formatNumber(stats.antiMartingale.blocks)}**`,
-          `限制紀錄：**0 金幣**`
+          `限制紀錄：**${formatNumber(stats.antiMartingale.blocks)}**`
         ].join('\n'),
         inline: false
       }

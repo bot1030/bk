@@ -1,4 +1,5 @@
 const prisma = require('../database/prisma');
+const { STARTING_COINS } = require('../config/economyConfig');
 
 const JK_TO_COINS_RATE = 1000;
 
@@ -8,8 +9,13 @@ const ADMIN_USER_IDS = [
   '1319968425698922591'
 ];
 
+const EXTRA_EXCLUDED_USER_IDS = [
+  '979514745109479444'
+];
+
 const EXCLUDED_USER_IDS = [
-  ...ADMIN_USER_IDS
+  ...ADMIN_USER_IDS,
+  ...EXTRA_EXCLUDED_USER_IDS
 ];
 
 const GAME_DEFINITIONS = [
@@ -71,7 +77,6 @@ function makeBaseStats(title, betLabel = '總下注金額') {
     payoutEvents: 0,
     totalNegativeCoinValue: 0,
     totalPositiveCoinValue: 0,
-    netForCasino: 0,
     jkPositive: 0,
     jkNegative: 0
   };
@@ -104,6 +109,7 @@ function aggregateGameStats(transactions, definition) {
 
   for (const tx of transactions) {
     if (!definition.types.includes(tx.type)) continue;
+
     const coinValue = toCoinValue(tx);
     const userId = tx.user?.discordId;
     if (userId) stats.players.add(userId);
@@ -190,6 +196,29 @@ function aggregateRodPurchases(transactions) {
   return { players: players.size, purchases, coinsSpent };
 }
 
+function aggregateAdminGiveaways(transactions) {
+  const players = new Set();
+  let entries = 0;
+  let coinValuePaid = 0;
+  let coinsPaid = 0;
+  let jkPaid = 0;
+
+  for (const tx of transactions) {
+    if (tx.type !== 'ADMIN_ADD') continue;
+    if (tx.amount <= 0) continue;
+
+    const userId = tx.user?.discordId;
+    if (userId) players.add(userId);
+
+    entries += 1;
+    coinValuePaid += toCoinValue(tx);
+
+    if (tx.currency === 'COINS') coinsPaid += tx.amount;
+    if (tx.currency === 'JK') jkPaid += tx.amount;
+  }
+
+  return { players: players.size, entries, coinValuePaid, coinsPaid, jkPaid };
+}
 
 function aggregateAntiMartingale(transactions) {
   const players = new Set();
@@ -205,38 +234,67 @@ function aggregateAntiMartingale(transactions) {
   return { players: players.size, blocks };
 }
 
-async function getCasinoControlStats() {
-  const transactions = await prisma.transaction.findMany({
+async function getIncludedUserCount() {
+  return prisma.user.count({
     where: {
-      user: {
-        discordId: {
-          notIn: EXCLUDED_USER_IDS
-        }
+      discordId: {
+        notIn: EXCLUDED_USER_IDS
       }
-    },
-    select: {
-      type: true,
-      currency: true,
-      amount: true,
-      reason: true,
-      createdAt: true,
-      user: {
-        select: {
-          discordId: true,
-          username: true
-        }
-      }
-    },
-    orderBy: { createdAt: 'asc' }
+    }
   });
+}
+
+async function getCasinoControlStats() {
+  const [transactions, includedUserCount] = await Promise.all([
+    prisma.transaction.findMany({
+      where: {
+        user: {
+          discordId: {
+            notIn: EXCLUDED_USER_IDS
+          }
+        }
+      },
+      select: {
+        type: true,
+        currency: true,
+        amount: true,
+        reason: true,
+        createdAt: true,
+        user: {
+          select: {
+            discordId: true,
+            username: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    }),
+    getIncludedUserCount()
+  ]);
 
   const gameStats = GAME_DEFINITIONS.map(definition => aggregateGameStats(transactions, definition));
   const daily = aggregateDaily(transactions);
   const convert = aggregateConvert(transactions);
   const rods = aggregateRodPurchases(transactions);
+  const adminGiveaways = aggregateAdminGiveaways(transactions);
   const antiMartingale = aggregateAntiMartingale(transactions);
 
-  const totalCasinoProfit = gameStats.reduce((sum, game) => sum + game.casinoProfit, 0);
+  const gameCasinoProfit = gameStats.reduce((sum, game) => sum + game.casinoProfit, 0);
+  const rodCasinoProfit = rods.coinsSpent;
+  const startingBonusLoss = includedUserCount * STARTING_COINS;
+
+  const operatingLosses = {
+    startingBonusUsers: includedUserCount,
+    startingBonusPerUser: STARTING_COINS,
+    startingBonusLoss,
+    dailyLoss: daily.coinsPaid,
+    adminGiveawayLoss: adminGiveaways.coinValuePaid,
+    totalLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid
+  };
+
+  const totalCasinoProfitBeforeOperatingLosses = gameCasinoProfit + rodCasinoProfit;
+  const totalCasinoProfit = totalCasinoProfitBeforeOperatingLosses - operatingLosses.totalLoss;
+
   const totalPlayers = new Set();
   for (const tx of transactions) {
     if (tx.user?.discordId) totalPlayers.add(tx.user.discordId);
@@ -246,12 +304,18 @@ async function getCasinoControlStats() {
     generatedAt: new Date(),
     excludedUserIds: EXCLUDED_USER_IDS,
     totalPlayers: totalPlayers.size,
+    includedUserCount,
     totalTransactions: transactions.length,
+    gameCasinoProfit,
+    rodCasinoProfit,
+    totalCasinoProfitBeforeOperatingLosses,
+    operatingLosses,
     totalCasinoProfit,
     games: gameStats,
     daily,
     convert,
     rods,
+    adminGiveaways,
     antiMartingale
   };
 }

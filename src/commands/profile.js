@@ -1,0 +1,118 @@
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const prisma = require('../database/prisma');
+const { getOrCreateUser } = require('../systems/economySystem');
+const { rods } = require('../config/rodConfig');
+const { formatCoins, formatJK, formatNumber } = require('../utils/format');
+
+const JK_TO_COINS_RATE = 1000;
+
+function percent(numerator, denominator) {
+  if (!denominator || denominator <= 0) return '0.00%';
+  return `${((numerator / denominator) * 100).toFixed(2)}%`;
+}
+
+function isRefundTransaction(tx) {
+  const reason = tx.reason || '';
+  return reason.includes('退回') || reason.includes('退款') || reason.includes('退出') || reason.includes('本金');
+}
+
+function countWins(transactions, type) {
+  return transactions.filter(tx =>
+    tx.type === type &&
+    tx.currency === 'COINS' &&
+    tx.amount > 0 &&
+    !isRefundTransaction(tx)
+  ).length;
+}
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('profile')
+    .setDescription('查看玩家公開資料：總資產、遊戲次數與勝率')
+    .addUserOption(option =>
+      option
+        .setName('user')
+        .setDescription('要查看資料的玩家，不填則查看自己')
+        .setRequired(false)
+    ),
+
+  async execute(interaction) {
+    await interaction.deferReply();
+
+    const target = interaction.options.getUser('user') || interaction.user;
+    const user = await getOrCreateUser(target);
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId: user.id },
+      select: {
+        type: true,
+        currency: true,
+        amount: true,
+        reason: true
+      }
+    });
+
+    const selectedRod = rods[user.selectedRod] || rods.basic;
+    const totalWealth = user.coins + user.jkBalance * JK_TO_COINS_RATE;
+
+    const coinflipWins = countWins(transactions, 'COINFLIP');
+    const slotsWins = countWins(transactions, 'SLOTS');
+    const minesWins = countWins(transactions, 'MINES');
+
+    const casinoGamesPlayed = user.coinflipPlayed + user.slotsPlayed + user.minesPlayed;
+    const casinoWins = coinflipWins + slotsWins + minesWins;
+    const allGamesPlayed = casinoGamesPlayed + user.fishingCount;
+
+    const embed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle('👤 玩家公開資料')
+      .setDescription([
+        `玩家：<@${target.id}>`,
+        '',
+        '此頁只顯示公開統計，不顯示玩家贏了或輸了多少金額。'
+      ].join('\n'))
+      .addFields(
+        {
+          name: '💰 目前總資產',
+          value: [
+            `金幣：**${formatCoins(user.coins)}**`,
+            `JK餘額：**${formatJK(user.jkBalance)}**`,
+            `總資產估值：**${formatCoins(totalWealth)}**`,
+            `換算比例：**1 JK餘額 = ${formatCoins(JK_TO_COINS_RATE)}**`
+          ].join('\n'),
+          inline: false
+        },
+        {
+          name: '🎮 總遊戲資料',
+          value: [
+            `總遊玩次數：**${formatNumber(allGamesPlayed)}** 次`,
+            `賭場遊戲次數：**${formatNumber(casinoGamesPlayed)}** 次`,
+            `賭場總勝率：**${percent(casinoWins, casinoGamesPlayed)}**`
+          ].join('\n'),
+          inline: false
+        },
+        {
+          name: '📊 各遊戲勝率',
+          value: [
+            `硬幣翻轉：**${formatNumber(user.coinflipPlayed)}** 次｜勝率 **${percent(coinflipWins, user.coinflipPlayed)}**`,
+            `老虎機：**${formatNumber(user.slotsPlayed)}** 次｜勝率 **${percent(slotsWins, user.slotsPlayed)}**`,
+            `踩地雷：**${formatNumber(user.minesPlayed)}** 次｜勝率 **${percent(minesWins, user.minesPlayed)}**`,
+            `釣魚：**${formatNumber(user.fishingCount)}** 次｜不計入勝率`
+          ].join('\n'),
+          inline: false
+        },
+        {
+          name: '🎣 釣魚資料',
+          value: [
+            `目前釣竿：**${selectedRod.label || selectedRod.name || user.selectedRod}**`,
+            '釣竿只顯示目前裝備，不公開釣魚收益金額。'
+          ].join('\n'),
+          inline: false
+        }
+      )
+      .setFooter({ text: '公開資料不包含個別交易金額或總盈虧。' })
+      .setTimestamp();
+
+    return interaction.editReply({ embeds: [embed] });
+  }
+};
