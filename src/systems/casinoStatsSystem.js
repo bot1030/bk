@@ -68,6 +68,16 @@ function safePercent(numerator, denominator) {
   return `${((numerator / denominator) * 100).toFixed(2)}%`;
 }
 
+function parseCoinflipTaxFromReason(reason) {
+  const text = String(reason || '');
+  const match = text.match(/稅金\s*([0-9,]+)/);
+  if (!match) return 0;
+
+  const value = Number(match[1].replace(/,/g, ''));
+  if (!Number.isSafeInteger(value) || value <= 0) return 0;
+  return value;
+}
+
 function makeBaseStats(title, betLabel = '總下注金額') {
   return {
     title,
@@ -78,7 +88,9 @@ function makeBaseStats(title, betLabel = '總下注金額') {
     totalNegativeCoinValue: 0,
     totalPositiveCoinValue: 0,
     jkPositive: 0,
-    jkNegative: 0
+    jkNegative: 0,
+    taxCollected: 0,
+    grossPayoutBeforeTax: 0
   };
 }
 
@@ -100,7 +112,9 @@ function finalizeGameStats(stats) {
     payoutRate: safePercent(totalPaid, totalBetOrCost),
     payoutEventRate: safePercent(stats.payoutEvents, stats.rounds),
     jkPositive: stats.jkPositive,
-    jkNegative: stats.jkNegative
+    jkNegative: stats.jkNegative,
+    taxCollected: stats.taxCollected,
+    grossPayoutBeforeTax: stats.grossPayoutBeforeTax
   };
 }
 
@@ -125,6 +139,12 @@ function aggregateGameStats(transactions, definition) {
     } else if (coinValue > 0) {
       stats.payoutEvents += 1;
       stats.totalPositiveCoinValue += coinValue;
+
+      if (tx.type === 'COINFLIP') {
+        const tax = parseCoinflipTaxFromReason(tx.reason);
+        stats.taxCollected += tax;
+        stats.grossPayoutBeforeTax += coinValue + tax;
+      }
     }
   }
 
@@ -279,6 +299,7 @@ async function getCasinoControlStats() {
   const adminGiveaways = aggregateAdminGiveaways(transactions);
   const antiMartingale = aggregateAntiMartingale(transactions);
 
+  const coinflipTaxCollected = gameStats.reduce((sum, game) => sum + (game.taxCollected || 0), 0);
   const gameCasinoProfit = gameStats.reduce((sum, game) => sum + game.casinoProfit, 0);
   const rodCasinoProfit = rods.coinsSpent;
   const startingBonusLoss = includedUserCount * STARTING_COINS;
@@ -307,6 +328,7 @@ async function getCasinoControlStats() {
     includedUserCount,
     totalTransactions: transactions.length,
     gameCasinoProfit,
+    coinflipTaxCollected,
     rodCasinoProfit,
     totalCasinoProfitBeforeOperatingLosses,
     operatingLosses,
@@ -328,6 +350,8 @@ function buildGameFieldValue(game) {
     `玩家獲得總額：**${formatCoins(game.totalPaid)}**`,
     `賭場淨利：**${formatCoins(game.casinoProfit)}**`,
     `玩家淨結果：**${formatCoins(game.playerNet)}**`,
+    game.taxCollected > 0 ? `扣稅收入：**+${formatCoins(game.taxCollected)}**（已包含在賭場淨利）` : null,
+    game.grossPayoutBeforeTax > 0 ? `稅前獎金總額：**${formatCoins(game.grossPayoutBeforeTax)}**` : null,
     `返還率：**${game.payoutRate}**`,
     `獲獎筆數比例：**${game.payoutEventRate}**`
   ];
@@ -336,7 +360,7 @@ function buildGameFieldValue(game) {
     lines.push(`JK變動：+${formatJK(game.jkPositive)} / -${formatJK(game.jkNegative)}`);
   }
 
-  return lines.join('\n');
+  return lines.filter(Boolean).join('\n');
 }
 
 module.exports = {

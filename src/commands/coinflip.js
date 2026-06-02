@@ -12,6 +12,25 @@ function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 
+const COINFLIP_TAX_THRESHOLD = 30000;
+const COINFLIP_LOW_TAX_RATE = 0.02;
+const COINFLIP_HIGH_TAX_RATE = 0.05;
+
+function calculateCoinflipTax(grossPayout) {
+  if (!grossPayout || grossPayout <= 0) {
+    return { grossPayout: 0, taxRate: 0, taxAmount: 0, netPayout: 0 };
+  }
+
+  const taxRate = grossPayout > COINFLIP_TAX_THRESHOLD ? COINFLIP_HIGH_TAX_RATE : COINFLIP_LOW_TAX_RATE;
+  const taxAmount = Math.ceil(grossPayout * taxRate);
+  const netPayout = Math.max(0, grossPayout - taxAmount);
+
+  return { grossPayout, taxRate, taxAmount, netPayout };
+}
+
+function formatTaxRate(rate) {
+  return `${Math.round(rate * 100)}%`;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -61,18 +80,27 @@ module.exports = {
     });
 
     const result = rollCoinflipWithChoice(choice);
+    let grossPayout = 0;
+    let taxRate = 0;
+    let taxAmount = 0;
     let payout = 0;
 
     if (result.won) {
-      payout = bet * gamblingConfig.coinflip.payoutMultiplier;
-      await addCoins(interaction.user, payout, 'COINFLIP', '硬幣翻轉勝利');
+      grossPayout = bet * gamblingConfig.coinflip.payoutMultiplier;
+      const tax = calculateCoinflipTax(grossPayout);
+      taxRate = tax.taxRate;
+      taxAmount = tax.taxAmount;
+      payout = tax.netPayout;
+      await addCoins(interaction.user, payout, 'COINFLIP', `硬幣翻轉勝利｜稅前 ${grossPayout}｜稅金 ${taxAmount}`);
     }
 
     await sendPostGameRiskAlert(interaction.client, interaction.user, '硬幣翻轉', [
       `本局下注：**${formatCoins(bet)}**`,
       `本局結果：**${result.won ? '勝利' : '失敗'}**`,
-      `本局獲得：**${formatCoins(payout)}**`
-    ]);
+      result.won ? `稅前獎金：**${formatCoins(grossPayout)}**` : `本局獲得：**${formatCoins(0)}**`,
+      result.won ? `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）` : null,
+      result.won ? `實收獎金：**${formatCoins(payout)}**` : null
+    ].filter(Boolean));
 
     if (result.won && payout > 0) {
       await announceBigWin(interaction.client, interaction.guildId, {
@@ -82,7 +110,10 @@ module.exports = {
         detailLines: [
           `下注金額：**${formatCoins(bet)}**`,
           `玩家選擇：**${result.choiceLabel}**`,
-          `硬幣結果：**${result.resultLabel}**`
+          `硬幣結果：**${result.resultLabel}**`,
+          `稅前獎金：**${formatCoins(grossPayout)}**`,
+          `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）`,
+          `實收獎金：**${formatCoins(payout)}**`
         ]
       });
     }
@@ -97,7 +128,11 @@ module.exports = {
         '',
         `結果：${result.won ? '**你贏了！**' : '**你輸了。**'}`,
         result.won
-          ? `你獲得了 **${formatCoins(payout)}**。`
+          ? [
+              `稅前獎金：**${formatCoins(grossPayout)}**`,
+              `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）`,
+              `實收獎金：**${formatCoins(payout)}**。`
+            ].join('\n')
           : `你失去了 **${formatCoins(bet)}**。`
       ].join('\n'));
 

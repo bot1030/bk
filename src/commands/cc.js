@@ -41,6 +41,7 @@ module.exports = {
         `有效交易紀錄數：**${formatNumber(stats.totalTransactions)}**`,
         '',
         `遊戲與釣竿淨利：**${formatCoins(stats.totalCasinoProfitBeforeOperatingLosses)}**`,
+        `硬幣翻轉扣稅收入：**+${formatCoins(stats.coinflipTaxCollected)}**（已包含在上方淨利）`,
         `營運發放成本：**-${formatCoins(stats.operatingLosses.totalLoss)}**`,
         `賭場總淨利：**${formatCoins(stats.totalCasinoProfit)}**`
       ].join('\n'))
@@ -72,6 +73,15 @@ module.exports = {
           `領取玩家：**${formatNumber(stats.daily.players)}**`,
           `領取次數：**${formatNumber(stats.daily.claims)}**`,
           `發放金幣：**${formatCoins(stats.daily.coinsPaid)}**`
+        ].join('\n'),
+        inline: false
+      },
+
+      {
+        name: '🧾 硬幣翻轉稅收',
+        value: [
+          `扣稅收入：**${formatCoins(stats.coinflipTaxCollected)}**`,
+          '此金額已經包含在硬幣翻轉與賭場總淨利內，不會重複加算。'
         ].join('\n'),
         inline: false
       },
