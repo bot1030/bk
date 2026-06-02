@@ -12,16 +12,14 @@ function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 
-const COINFLIP_TAX_THRESHOLD = 30000;
-const COINFLIP_LOW_TAX_RATE = 0.02;
-const COINFLIP_HIGH_TAX_RATE = 0.05;
+const COINFLIP_TAX_RATE = 0.03;
 
 function calculateCoinflipTax(grossPayout) {
   if (!grossPayout || grossPayout <= 0) {
     return { grossPayout: 0, taxRate: 0, taxAmount: 0, netPayout: 0 };
   }
 
-  const taxRate = grossPayout > COINFLIP_TAX_THRESHOLD ? COINFLIP_HIGH_TAX_RATE : COINFLIP_LOW_TAX_RATE;
+  const taxRate = COINFLIP_TAX_RATE;
   const taxAmount = Math.ceil(grossPayout * taxRate);
   const netPayout = Math.max(0, grossPayout - taxAmount);
 

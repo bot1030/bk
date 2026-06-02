@@ -60,16 +60,14 @@ async function respondPrivate(interaction, payload = {}) {
 }
 
 
-const COINFLIP_TAX_THRESHOLD = 30000;
-const COINFLIP_LOW_TAX_RATE = 0.02;
-const COINFLIP_HIGH_TAX_RATE = 0.05;
+const COINFLIP_TAX_RATE = 0.03;
 
 function calculateCoinflipTax(grossPayout) {
   if (!grossPayout || grossPayout <= 0) {
     return { grossPayout: 0, taxRate: 0, taxAmount: 0, netPayout: 0 };
   }
 
-  const taxRate = grossPayout > COINFLIP_TAX_THRESHOLD ? COINFLIP_HIGH_TAX_RATE : COINFLIP_LOW_TAX_RATE;
+  const taxRate = COINFLIP_TAX_RATE;
   const taxAmount = Math.ceil(grossPayout * taxRate);
   const netPayout = Math.max(0, grossPayout - taxAmount);
 
@@ -269,8 +267,7 @@ function buildCoinflipPanel() {
       '📌 **規則**',
       `下注範圍：**${formatCoins(gamblingConfig.coinflip.minBet)}–${formatCoins(gamblingConfig.coinflip.maxBet)}**`,
       '猜中後獲得 **2x 下注金額**，但會先扣除硬幣翻轉稅。',
-      '稅前獎金 **30,000 金幣以下：2% 稅**。',
-      '稅前獎金 **超過 30,000 金幣：5% 稅**。',
+      '所有中獎獎金固定扣除 **3% 稅**。',
       '猜錯則失去下注金額。',
       '',
       '🎮 **玩法**',
