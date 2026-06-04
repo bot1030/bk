@@ -1,7 +1,13 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const prisma = require('../database/prisma');
 const { getOrCreateUser } = require('../systems/economySystem');
 const { formatCoins, formatJK, formatNumber } = require('../utils/format');
+
+const ADMIN_USER_IDS = [
+  '473647287026057227',
+  '786683877107302461',
+  '1319968425698922591'
+];
 
 const TYPE_LABELS = {
   COINFLIP: '硬幣翻轉',
@@ -16,6 +22,14 @@ const TYPE_LABELS = {
   ANTI_MARTINGALE: '倍投法控管',
   SYSTEM: '系統'
 };
+
+function privatePayload(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
+function isAdmin(userId) {
+  return ADMIN_USER_IDS.includes(userId);
+}
 
 function formatTransactionAmount(tx) {
   const sign = tx.amount >= 0 ? '+' : '-';
@@ -39,11 +53,11 @@ function formatTransactionLine(tx, index) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('history')
-    .setDescription('查看自己或指定玩家最近的交易紀錄')
+    .setDescription('查看最近的交易與金幣變動紀錄')
     .addUserOption(option =>
       option
         .setName('user')
-        .setDescription('要查看紀錄的玩家，不填則查看自己')
+        .setDescription('要查看紀錄的玩家；只有管理員可以查看其他玩家')
         .setRequired(false)
     )
     .addIntegerOption(option =>
@@ -56,10 +70,15 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await interaction.deferReply();
-
     const target = interaction.options.getUser('user') || interaction.user;
     const limit = interaction.options.getInteger('limit') || 10;
+    const viewingOtherUser = target.id !== interaction.user.id;
+
+    if (viewingOtherUser && !isAdmin(interaction.user.id)) {
+      return interaction.reply(privatePayload({ content: '你不能查看其他玩家的交易紀錄。' }));
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = await getOrCreateUser(target);
     const transactions = await prisma.transaction.findMany({
@@ -81,7 +100,7 @@ module.exports = {
           ? transactions.map((tx, index) => formatTransactionLine(tx, index + 1)).join('\n')
           : '目前沒有任何交易紀錄。'
       ].join('\n'))
-      .setFooter({ text: '此為公開交易紀錄。正數代表獲得，負數代表支出或扣除。' })
+      .setFooter({ text: '此紀錄只會顯示給你。正數代表獲得，負數代表支出或扣除。' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });
