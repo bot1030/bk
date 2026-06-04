@@ -99,3 +99,19 @@ model TheftAttempt {
   amount    Int      @default(0)
   createdAt DateTime @default(now())
 }
+
+
+model AdminWarningLog {
+  id                        String   @id @default(cuid())
+  guildId                   String?
+  targetDiscordId           String
+  alertType                 String
+  dailyClaims               Int      @default(0)
+  gameTransactions          Int      @default(0)
+  coinReductionTransactions Int      @default(0)
+  targetCoins               Int      @default(0)
+  reason                    String?
+  createdAt                 DateTime @default(now())
+
+  @@index([targetDiscordId, alertType, createdAt])
+}

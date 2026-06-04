@@ -26,6 +26,7 @@ const { randomInt } = require('../utils/random');
 const { getRemainingCooldown } = require('../utils/cooldown');
 const { formatCoins, formatJK, formatDuration } = require('../utils/format');
 const { createConvertUi } = require('../commands/convert');
+const { checkDailyFarmingWarning } = require('./dailyFarmingMonitorSystem');
 const {
   createBoard,
   buildMinesComponents,
@@ -446,7 +447,12 @@ async function claimDailyFromPanel(interaction) {
       '明天再回來領取獎勵。'
     ].join('\n'));
 
-  return interaction.reply(privatePayload({ embeds: [embed] }));
+  await interaction.reply(privatePayload({ embeds: [embed] }));
+
+  checkDailyFarmingWarning(interaction.client, interaction.guild, interaction.user)
+    .catch(error => console.error('[dailyFarmingMonitor] Failed to check daily warning:', error));
+
+  return null;
 }
 
 async function executeCoinflipFromPanel(interaction, choice, bet) {

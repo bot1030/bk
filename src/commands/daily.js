@@ -6,6 +6,7 @@ const { randomInt } = require('../utils/random');
 const { getRemainingCooldown } = require('../utils/cooldown');
 const { formatCoins, formatDuration } = require('../utils/format');
 const { getMemberRoleBenefits, applyDailyBoost, formatBenefitLine } = require('../systems/roleBenefitSystem');
+const { checkDailyFarmingWarning } = require('../systems/dailyFarmingMonitorSystem');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -49,5 +50,10 @@ module.exports = {
       ].join('\n'));
 
     await interaction.reply({ embeds: [embed] });
+
+    checkDailyFarmingWarning(interaction.client, interaction.guild, interaction.user)
+      .catch(error => console.error('[dailyFarmingMonitor] Failed to check daily warning:', error));
+
+    return null;
   }
 };
