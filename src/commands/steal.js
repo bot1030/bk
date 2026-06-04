@@ -12,6 +12,38 @@ function isProtectedTarget(user) {
   return user.bot || ROLE_SHOP.thief.protectedUserIds.includes(user.id);
 }
 
+async function notifyVictim(interaction, target, result) {
+  const sourceLines = [];
+
+  if (result.coinPart > 0) {
+    sourceLines.push(`Coins：${formatCoins(result.coinPart)}`);
+  }
+
+  if (result.pendingPart > 0) {
+    sourceLines.push(`待結算 JK餘額：${formatCoins(result.pendingPart)}`);
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle('🕵️ 你被偷竊了！')
+    .setDescription([
+      `偷竊者：<@${interaction.user.id}>`,
+      `損失金額：**${formatCoins(result.amount)}**`,
+      `來源：${sourceLines.length > 0 ? sourceLines.join(' / ') : 'Coins'}`,
+      '',
+      '🛡️ 保護狀態：你接下來 **24 小時內** 不會再次被成功偷竊。'
+    ].join('\n'))
+    .setFooter({ text: interaction.guild?.name ? `伺服器：${interaction.guild.name}` : '偷竊通知' })
+    .setTimestamp();
+
+  try {
+    await target.send({ embeds: [embed] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('偷竊')
@@ -99,6 +131,8 @@ module.exports = {
       .setTitle('🕵️ 偷竊成功')
       .setDescription(detailLines.join('\n'));
 
-    return interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
+    await notifyVictim(interaction, target, result);
+    return null;
   }
 };
