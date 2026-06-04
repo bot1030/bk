@@ -3,6 +3,8 @@ const prisma = require('../database/prisma');
 const { getOrCreateUser } = require('../systems/economySystem');
 const { rods } = require('../config/rodConfig');
 const { formatCoins, formatJK, formatNumber } = require('../utils/format');
+const { getPendingJkSummaryByUserId } = require('../systems/pendingJkSystem');
+const { getMemberRoleBenefits, formatBenefitLine } = require('../systems/roleBenefitSystem');
 
 const JK_TO_COINS_RATE = 1000;
 
@@ -41,6 +43,14 @@ module.exports = {
 
     const target = interaction.options.getUser('user') || interaction.user;
     const user = await getOrCreateUser(target);
+    const pending = await getPendingJkSummaryByUserId(user.id);
+    let targetMember = null;
+    try {
+      targetMember = await interaction.guild.members.fetch(target.id);
+    } catch {
+      targetMember = null;
+    }
+    const benefits = getMemberRoleBenefits(targetMember);
 
     const transactions = await prisma.transaction.findMany({
       where: { userId: user.id },
@@ -53,7 +63,7 @@ module.exports = {
     });
 
     const selectedRod = rods[user.selectedRod] || rods.basic;
-    const totalWealth = user.coins + user.jkBalance * JK_TO_COINS_RATE;
+    const totalWealth = user.coins + user.jkBalance * JK_TO_COINS_RATE + pending.pendingCoins;
 
     const coinflipWins = countWins(transactions, 'COINFLIP');
     const slotsWins = countWins(transactions, 'SLOTS');
@@ -76,7 +86,8 @@ module.exports = {
           name: '💰 目前總資產',
           value: [
             `金幣：**${formatCoins(user.coins)}**`,
-            `JK餘額：**${formatJK(user.jkBalance)}**`,
+            `正式 JK餘額：**${formatJK(user.jkBalance)}**`,
+            `待結算 JK餘額：約 **${formatJK(Math.floor(pending.pendingCoins / JK_TO_COINS_RATE))}**`,
             `總資產估值：**${formatCoins(totalWealth)}**`,
             `換算比例：**1 JK餘額 = ${formatCoins(JK_TO_COINS_RATE)}**`
           ].join('\n'),
@@ -98,6 +109,17 @@ module.exports = {
             `老虎機：**${formatNumber(user.slotsPlayed)}** 次｜勝率 **${percent(slotsWins, user.slotsPlayed)}**`,
             `踩地雷：**${formatNumber(user.minesPlayed)}** 次｜勝率 **${percent(minesWins, user.minesPlayed)}**`,
             `釣魚：**${formatNumber(user.fishingCount)}** 次｜不計入勝率`
+          ].join('\n'),
+          inline: false
+        },
+        {
+          name: '🎭 角色加成',
+          value: [
+            `目前加成：**${formatBenefitLine(benefits)}**`,
+            `每日加成：**+${benefits.dailyBoostPercent}%**`,
+            `釣魚冷卻：**-${benefits.fishingCooldownPercent}%**`,
+            `幸運值：**+${benefits.luckPercent}%**`,
+            benefits.ownsServerBooster ? 'Server Booster：**已啟用 +15% 每日加成**' : 'Server Booster：**未啟用**'
           ].join('\n'),
           inline: false
         },

@@ -14,6 +14,11 @@ const { getRemainingCooldown } = require('../utils/cooldown');
 const prisma = require('../database/prisma');
 const { sendSpecialRewardAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
+const {
+  getMemberRoleBenefits,
+  applyFishingCooldownReduction,
+  formatBenefitLine
+} = require('../systems/roleBenefitSystem');
 
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -36,13 +41,20 @@ function buildConfirmButtons(userId) {
   ];
 }
 
-function getFishCooldownRemaining(user) {
-  return getRemainingCooldown(user.lastFish, fishingConfig.cooldownMs);
+function getEffectiveFishCooldownMs(member) {
+  const benefits = getMemberRoleBenefits(member);
+  return applyFishingCooldownReduction(fishingConfig.cooldownMs, benefits);
+}
+
+function getFishCooldownRemaining(user, member) {
+  return getRemainingCooldown(user.lastFish, getEffectiveFishCooldownMs(member));
 }
 
 async function executeFishing(interaction) {
   const userBefore = await getOrCreateUser(interaction.user);
-  const remaining = getFishCooldownRemaining(userBefore);
+  const benefits = getMemberRoleBenefits(interaction.member);
+  const effectiveCooldownMs = getEffectiveFishCooldownMs(interaction.member);
+  const remaining = getRemainingCooldown(userBefore.lastFish, effectiveCooldownMs);
 
   if (remaining > 0) {
     const embed = new EmbedBuilder()
@@ -52,13 +64,14 @@ async function executeFishing(interaction) {
         '你剛剛已經釣過魚了。',
         `請在 **${formatDuration(remaining)}** 後再來釣魚。`,
         '',
-        '每次釣魚是免費的，但冷卻時間為 **1 小時 30 分鐘**。'
+        `目前釣魚冷卻：**${formatDuration(effectiveCooldownMs)}**`,
+        `角色加成：${formatBenefitLine(benefits)}`
       ].join('\n'));
 
     return interaction.editReply({ embeds: [embed], components: [], content: null });
   }
 
-  const result = rollFishingResult(userBefore);
+  const result = rollFishingResult(userBefore, benefits.luckPercent);
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -83,7 +96,8 @@ async function executeFishing(interaction) {
       isHiddenDiamond: true,
       detailLines: [
         '玩家釣到了 **隱藏鑽石**！',
-        '本次釣魚成本：**免費**'
+        '本次釣魚成本：**免費**',
+        '隱藏鑽石不受角色幸運值影響。'
       ]
     });
 
@@ -95,7 +109,8 @@ async function executeFishing(interaction) {
         `你獲得了 **${formatJK(result.jk)}**。`,
         '',
         '本次釣魚成本：**免費**',
-        '下一次釣魚冷卻：**1 小時 30 分鐘**'
+        `下一次釣魚冷卻：**${formatDuration(effectiveCooldownMs)}**`,
+        '隱藏鑽石不受角色幸運值影響。'
       ].join('\n'));
 
     return interaction.editReply({ embeds: [embed], components: [], content: null });
@@ -123,11 +138,12 @@ async function executeFishing(interaction) {
     `你釣到了：**${result.label}**`,
     `使用釣竿：**${result.rod.label}**`,
     `釣竿效果：**${getRodEffectLabel ? getRodEffectLabel(result.rod) : '提高高級魚類機率'}**`,
+    `角色加成：**${formatBenefitLine(benefits)}**`,
     `自動出售價格：**${formatCoins(result.coins)}**`,
     '成本：**免費**',
     `本次獲得：**${formatCoins(totalCoins)}**`,
     '',
-    '下一次釣魚冷卻：**1 小時 30 分鐘**'
+    `下一次釣魚冷卻：**${formatDuration(effectiveCooldownMs)}**`
   ];
 
   if (result.treasure) {
@@ -145,17 +161,19 @@ async function executeFishing(interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('fish')
-    .setDescription('免費釣魚並獲得隨機獎勵，冷卻時間為 1 小時 30 分鐘'),
+    .setDescription('免費釣魚並獲得隨機獎勵，基礎冷卻時間為 1 小時 30 分鐘'),
 
   async execute(interaction) {
     const user = await getOrCreateUser(interaction.user);
-    const remaining = getFishCooldownRemaining(user);
+    const benefits = getMemberRoleBenefits(interaction.member);
+    const effectiveCooldownMs = getEffectiveFishCooldownMs(interaction.member);
+    const remaining = getFishCooldownRemaining(user, interaction.member);
 
     if (remaining > 0) {
       const embed = new EmbedBuilder()
         .setColor(0xe67e22)
         .setTitle('⏰ 釣魚冷卻中')
-        .setDescription(`請在 **${formatDuration(remaining)}** 後再來釣魚。`);
+        .setDescription(`請在 **${formatDuration(remaining)}** 後再來釣魚。\n目前釣魚冷卻：**${formatDuration(effectiveCooldownMs)}**`);
 
       return interaction.reply(privatePayload({ embeds: [embed] }));
     }
@@ -165,8 +183,10 @@ module.exports = {
       .setTitle('🎣 釣魚確認')
       .setDescription([
         '本次釣魚成本：**免費**',
-        '冷卻時間：**1 小時 30 分鐘**',
+        `目前冷卻時間：**${formatDuration(effectiveCooldownMs)}**`,
+        `角色加成：**${formatBenefitLine(benefits)}**`,
         '魚類會自動出售成金幣。',
+        '隱藏鑽石不受角色幸運值影響。',
         '',
         '你確定要開始釣魚嗎？'
       ].join('\n'));
@@ -198,5 +218,6 @@ module.exports = {
     }
   },
 
-  executeFishing
+  executeFishing,
+  getEffectiveFishCooldownMs
 };

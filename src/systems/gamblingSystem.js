@@ -9,19 +9,32 @@ function faceLabel(face) {
   return face === 'heads' ? '正面' : '反面';
 }
 
-function rollCoinflip() {
-  return Math.random() < gamblingConfig.coinflip.winChance;
+function normalizeLuckPercent(luckPercent = 0) {
+  const value = Number(luckPercent) || 0;
+  return Math.min(1.25, Math.max(0, value));
 }
 
-function rollCoinflipWithChoice(choice) {
-  const won = rollCoinflip();
+function getCoinflipWinChance(luckPercent = 0) {
+  const adjusted = gamblingConfig.coinflip.winChance + normalizeLuckPercent(luckPercent) / 100;
+  return Math.min(0.95, Math.max(0.01, adjusted));
+}
+
+function rollCoinflip(luckPercent = 0) {
+  return Math.random() < getCoinflipWinChance(luckPercent);
+}
+
+function rollCoinflipWithChoice(choice, luckPercent = 0) {
+  const winChance = getCoinflipWinChance(luckPercent);
+  const won = Math.random() < winChance;
   const resultFace = won ? choice : oppositeFace(choice);
 
   return {
     won,
     resultFace,
     resultLabel: faceLabel(resultFace),
-    choiceLabel: faceLabel(choice)
+    choiceLabel: faceLabel(choice),
+    winChance,
+    luckPercent: normalizeLuckPercent(luckPercent)
   };
 }
 
@@ -57,6 +70,7 @@ function calculatePayout(bet, multiplier) {
 module.exports = {
   rollCoinflip,
   rollCoinflipWithChoice,
+  getCoinflipWinChance,
   rollSlots,
   calculatePayout,
   faceLabel

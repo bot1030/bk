@@ -2,16 +2,25 @@ const fishingConfig = require('../config/fishingConfig');
 const { rods } = require('../config/rodConfig');
 const { randomInt, rollChance, rollWeighted } = require('../utils/random');
 
-function getAdjustedFishTable(rod) {
+function normalizeLuckPercent(luckPercent = 0) {
+  const value = Number(luckPercent) || 0;
+  return Math.min(1.25, Math.max(0, value));
+}
+
+function getAdjustedFishTable(rod, luckPercent = 0) {
   const boost = Number(rod.rarityBoost || 0);
+  const luck = normalizeLuckPercent(luckPercent);
+
+  // Luck gives a very small rarity tilt. Hidden Diamond is handled separately and is never affected.
+  const luckTilt = 1 + luck * 0.08;
 
   const rarityMultipliers = {
-    common: Math.max(0.1, 1 - boost * 0.45),
+    common: Math.max(0.1, 1 - boost * 0.45 - luck * 0.01),
     uncommon: Math.max(0.1, 1 - boost * 0.2),
-    rare: 1 + boost * 0.8,
-    epic: 1 + boost * 1.4,
-    legendary: 1 + boost * 2.2,
-    mythic: 1 + boost * 3.5
+    rare: (1 + boost * 0.8) * luckTilt,
+    epic: (1 + boost * 1.4) * luckTilt,
+    legendary: (1 + boost * 2.2) * luckTilt,
+    mythic: (1 + boost * 3.5) * luckTilt
   };
 
   return fishingConfig.fishTable.map(fish => ({
@@ -27,10 +36,11 @@ function getRodEffectLabel(rod) {
   return `${rod.effect || '提高高級魚類機率'}｜高級魚傾向 +${boostPercent}%${treasureText}`;
 }
 
-function rollFishingResult(user) {
+function rollFishingResult(user, luckPercent = 0) {
   const selectedRod = rods[user.selectedRod] || rods.basic;
+  const luck = normalizeLuckPercent(luckPercent);
 
-  // 隱藏鑽石是特殊超稀有獎勵，不受釣竿加成影響，避免 JK餘額 被過度農出來。
+  // 隱藏鑽石是特殊超稀有獎勵，不受釣竿或角色幸運值加成影響，避免 JK餘額 被過度農出來。
   if (rollChance(fishingConfig.hiddenDiamond.chance)) {
     return {
       type: 'hidden_diamond',
@@ -38,18 +48,19 @@ function rollFishingResult(user) {
       coins: 0,
       jk: fishingConfig.hiddenDiamond.jkReward,
       rod: selectedRod,
-      treasure: null
+      treasure: null,
+      luckPercent: luck
     };
   }
 
-  // 釣竿不會直接提高「一定賺錢」的機率，而是把魚類結果稍微往更高稀有度偏移。
-  const adjustedFishTable = getAdjustedFishTable(selectedRod);
+  // 釣竿與角色幸運值不會直接保證賺錢，只會把普通獎勵微幅往高稀有度 / 寶箱偏移。
+  const adjustedFishTable = getAdjustedFishTable(selectedRod, luck);
   const fish = rollWeighted(adjustedFishTable);
   const baseValue = randomInt(fish.min, fish.max);
   const finalCoins = baseValue;
 
   let treasure = null;
-  const treasureChance = fishingConfig.treasureChest.chance + Number(selectedRod.treasureBonus || 0);
+  const treasureChance = fishingConfig.treasureChest.chance + Number(selectedRod.treasureBonus || 0) + luck;
   if (rollChance(treasureChance)) {
     treasure = rollWeighted(fishingConfig.treasureChest.rewards);
   }
@@ -62,7 +73,8 @@ function rollFishingResult(user) {
     baseValue,
     rod: selectedRod,
     treasure,
-    adjustedFishTable
+    adjustedFishTable,
+    luckPercent: luck
   };
 }
 

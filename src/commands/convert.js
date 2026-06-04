@@ -6,14 +6,14 @@ const {
   ButtonStyle,
   MessageFlags
 } = require('discord.js');
-const { addCoins, spendCoins, addJK, spendJK, getBalance } = require('../systems/economySystem');
+const { addCoins, spendCoins, spendJK, getBalance } = require('../systems/economySystem');
+const { createPendingJkConversion, getPendingJkSummaryByUserId } = require('../systems/pendingJkSystem');
 const { JK_CONVERSION_RATE } = require('../config/economyConfig');
-const { formatCoins, formatJK } = require('../utils/format');
+const { formatCoins, formatJK, formatDuration } = require('../utils/format');
 
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
-
 
 const CURRENCIES = {
   coins: {
@@ -66,6 +66,12 @@ function buildConvertEmbed({ amount, from, to, status = null, color = 0x3498db }
     '💱 **兌換比例**',
     `**${formatCoins(JK_CONVERSION_RATE)} = 1 JK餘額**`,
     `**1 JK餘額 = ${formatCoins(JK_CONVERSION_RATE)}**`,
+    '',
+    '🕒 **重要規則**',
+    '金幣換成 JK餘額後會先進入 **待結算 JK餘額**。',
+    '待結算時間：**24 小時**。',
+    '待結算期間仍可被 **幻影怪盜** 偷竊。',
+    '24 小時後會自動轉為正式 JK餘額。',
     '',
     '✅ 確認前請看清楚方向，避免換錯貨幣。'
   ];
@@ -204,7 +210,7 @@ module.exports = {
       return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
     }
 
-    // 金幣 -> JK餘額
+    // 金幣 -> 待結算 JK餘額
     if (from === 'coins' && to === 'jk') {
       if (amount % JK_CONVERSION_RATE !== 0) {
         const embed = buildConvertEmbed({
@@ -218,7 +224,7 @@ module.exports = {
       }
 
       const jkAmount = Math.floor(amount / JK_CONVERSION_RATE);
-      const spent = await spendCoins(interaction.user, amount, 'CONVERT', '金幣兌換成 JK餘額');
+      const spent = await spendCoins(interaction.user, amount, 'CONVERT', '金幣兌換成待結算 JK餘額');
 
       if (!spent.ok) {
         const embed = buildConvertEmbed({
@@ -231,27 +237,35 @@ module.exports = {
         return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
       }
 
-      await addJK(interaction.user, jkAmount, 'CONVERT', '金幣兌換成 JK餘額');
+      const user = await getBalance(interaction.user);
+      const pending = await createPendingJkConversion(user.id, amount);
+      const pendingSummary = await getPendingJkSummaryByUserId(user.id);
       const updated = await getBalance(interaction.user);
+      const remainingMs = pending.availableAt.getTime() - Date.now();
 
       const embed = new EmbedBuilder()
         .setColor(0x2ecc71)
-        .setTitle('✅ 兌換成功')
+        .setTitle('✅ 兌換成功｜待結算中')
         .setDescription([
           '🔁 **兌換方向**',
-          `**${currencyName(from)} ➜ ${currencyName(to)}**`,
+          `**${currencyName(from)} ➜ 待結算 JK餘額**`,
           '',
           `你使用了：**${formatCoins(amount)}**`,
-          `你獲得了：**${formatJK(jkAmount)}**`,
+          `待結算數量：**${formatJK(jkAmount)}**`,
+          `結算時間：**${formatDuration(remainingMs)} 後**`,
+          '',
+          '⚠️ 待結算期間仍可被 **幻影怪盜** 偷竊。',
+          '正式結算後才會進入受保護的 JK餘額。',
           '',
           `目前金幣：**${formatCoins(updated.coins)}**`,
-          `目前 JK餘額：**${formatJK(updated.jkBalance)}**`
+          `正式 JK餘額：**${formatJK(updated.jkBalance)}**`,
+          `待結算 JK餘額：約 **${formatJK(Math.floor(pendingSummary.pendingCoins / JK_CONVERSION_RATE))}**`
         ].join('\n'));
 
       return interaction.editReply({ embeds: [embed], components: [] });
     }
 
-    // JK餘額 -> 金幣
+    // 正式 JK餘額 -> 金幣
     if (from === 'jk' && to === 'coins') {
       const coinsAmount = amount * JK_CONVERSION_RATE;
       const spent = await spendJK(interaction.user, amount, 'CONVERT', 'JK餘額兌換成金幣');
@@ -262,7 +276,7 @@ module.exports = {
           from,
           to,
           color: 0xe74c3c,
-          status: '❌ **你的 JK餘額不足，無法完成兌換。**'
+          status: '❌ **你的正式 JK餘額不足，無法完成兌換。待結算 JK餘額不能提前使用。**'
         });
         return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
       }

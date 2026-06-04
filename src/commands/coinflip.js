@@ -4,6 +4,7 @@ const { validateBet } = require('../utils/guards');
 const { formatCoins } = require('../utils/format');
 const { spendCoins, addCoins } = require('../systems/economySystem');
 const { rollCoinflipWithChoice } = require('../systems/gamblingSystem');
+const { getMemberRoleBenefits, formatBenefitLine } = require('../systems/roleBenefitSystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
 const prisma = require('../database/prisma');
@@ -77,7 +78,8 @@ module.exports = {
       data: { coinflipPlayed: { increment: 1 } }
     });
 
-    const result = rollCoinflipWithChoice(choice);
+    const benefits = getMemberRoleBenefits(interaction.member);
+    const result = rollCoinflipWithChoice(choice, benefits.luckPercent);
     let grossPayout = 0;
     let taxRate = 0;
     let taxAmount = 0;
@@ -97,7 +99,8 @@ module.exports = {
       `本局結果：**${result.won ? '勝利' : '失敗'}**`,
       result.won ? `稅前獎金：**${formatCoins(grossPayout)}**` : `本局獲得：**${formatCoins(0)}**`,
       result.won ? `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）` : null,
-      result.won ? `實收獎金：**${formatCoins(payout)}**` : null
+      result.won ? `實收獎金：**${formatCoins(payout)}**` : null,
+      benefits.luckPercent > 0 ? `角色幸運值：**+${benefits.luckPercent}%**` : null
     ].filter(Boolean));
 
     if (result.won && payout > 0) {
@@ -111,8 +114,9 @@ module.exports = {
           `硬幣結果：**${result.resultLabel}**`,
           `稅前獎金：**${formatCoins(grossPayout)}**`,
           `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）`,
-          `實收獎金：**${formatCoins(payout)}**`
-        ]
+          `實收獎金：**${formatCoins(payout)}**`,
+          benefits.luckPercent > 0 ? `角色幸運值：**+${benefits.luckPercent}%**` : null
+        ].filter(Boolean)
       });
     }
 
@@ -123,6 +127,7 @@ module.exports = {
         `下注金額：**${formatCoins(bet)}**`,
         `你的選擇：**${result.choiceLabel}**`,
         `硬幣結果：**${result.resultLabel}**`,
+        benefits.luckPercent > 0 ? `角色加成：**${formatBenefitLine(benefits)}**` : null,
         '',
         `結果：${result.won ? '**你贏了！**' : '**你輸了。**'}`,
         result.won
@@ -132,8 +137,11 @@ module.exports = {
               `實收獎金：**${formatCoins(payout)}**。`
             ].join('\n')
           : `你失去了 **${formatCoins(bet)}**。`
-      ].join('\n'));
+      ].filter(line => line !== null).join('\n'));
 
     return interaction.reply(privatePayload({ embeds: [embed] }));
-  }
+  },
+
+  calculateCoinflipTax,
+  formatTaxRate
 };

@@ -14,6 +14,7 @@ const fishingConfig = require('../config/fishingConfig');
 const gamblingConfig = require('../config/gamblingConfig');
 const { rods } = require('../config/rodConfig');
 const { DAILY_REWARD_MIN, DAILY_REWARD_MAX, DAILY_COOLDOWN_MS } = require('../config/economyConfig');
+const { getMemberRoleBenefits, applyDailyBoost, applyFishingCooldownReduction, formatBenefitLine } = require('./roleBenefitSystem');
 const { getFishingRewardListText, getRodEffectLabel } = require('./fishingSystem');
 const { getOrCreateUser, spendCoins, addCoins } = require('./economySystem');
 const { buyRod, selectRod, getRodShopText } = require('./rodSystem');
@@ -117,10 +118,11 @@ function buildFishPanel() {
       '',
       '📌 **規則**',
       '每次釣魚成本：**免費**',
-      '冷卻時間：**1 小時 30 分鐘**',
+      '基礎冷卻時間：**1 小時 30 分鐘**',
+      '角色可降低釣魚冷卻，最高 **-25%**。',
       '魚類會自動出售成金幣，不需要手動賣魚。',
       '釣竿不會直接提高「一定賺錢」的機率，而是提高較高級魚類與寶箱的出現傾向。',
-      '隱藏鑽石機率不受釣竿影響，避免 JK餘額 被過度農出來。',
+      '隱藏鑽石機率不受釣竿或角色幸運值影響，避免 JK餘額 被過度農出來。',
       '釣魚有機率獲得寶箱或隱藏鑽石。',
       '',
       '🎁 **釣魚獎勵表**',
@@ -156,7 +158,9 @@ function buildDailyPanel() {
       '每天可以領取一次金幣獎勵。',
       '',
       '📌 **規則**',
-      `獎勵範圍：**${formatCoins(DAILY_REWARD_MIN)}–${formatCoins(DAILY_REWARD_MAX)}**`,
+      `基礎獎勵範圍：**${formatCoins(DAILY_REWARD_MIN)}–${formatCoins(DAILY_REWARD_MAX)}**`,
+      '角色每日加成可疊加，最高 **+30%**。',
+      'Server Booster 額外提供 **+15% 每日獎勵**，會列入 +30% 上限。',
       '冷卻時間：**24 小時**',
       '',
       '🎮 **玩法**',
@@ -192,7 +196,9 @@ function buildConvertPanel() {
       '點擊下方按鈕後，輸入你要兌換的數量。',
       '系統會開啟私人兌換介面，讓你選擇「把什麼貨幣」換成「什麼貨幣」。',
       '',
-      '⚠️ 金幣換成 JK餘額時，金幣數量必須是 1,000 的倍數。'
+      '⚠️ 金幣換成 JK餘額時，金幣數量必須是 1,000 的倍數。',
+      '金幣換成 JK餘額後會先進入 **待結算 JK餘額** 24 小時。',
+      '待結算期間仍可被 **幻影怪盜** 偷竊；正式結算後才受保護。'
     ].join('\n'));
 
   const components = [
@@ -418,8 +424,10 @@ async function claimDailyFromPanel(interaction) {
     return interaction.reply(privatePayload({ embeds: [embed] }));
   }
 
-  const reward = randomInt(DAILY_REWARD_MIN, DAILY_REWARD_MAX);
-  await addCoins(interaction.user, reward, 'DAILY', '每日獎勵');
+  const benefits = getMemberRoleBenefits(interaction.member);
+  const baseReward = randomInt(DAILY_REWARD_MIN, DAILY_REWARD_MAX);
+  const reward = applyDailyBoost(baseReward, benefits);
+  await addCoins(interaction.user, reward, 'DAILY', `每日獎勵｜基礎 ${baseReward}｜加成 +${benefits.dailyBoostPercent}%`);
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -429,7 +437,14 @@ async function claimDailyFromPanel(interaction) {
   const embed = new EmbedBuilder()
     .setColor(0x2ecc71)
     .setTitle('🎁 每日獎勵')
-    .setDescription(`你獲得了 **${formatCoins(reward)}**！\n明天再回來領取獎勵。`);
+    .setDescription([
+      `基礎獎勵：**${formatCoins(baseReward)}**`,
+      `角色加成：**+${benefits.dailyBoostPercent}%**`,
+      `本次獲得：**${formatCoins(reward)}**`,
+      '',
+      `目前加成：${formatBenefitLine(benefits)}`,
+      '明天再回來領取獎勵。'
+    ].join('\n'));
 
   return interaction.reply(privatePayload({ embeds: [embed] }));
 }
@@ -451,7 +466,8 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
     data: { coinflipPlayed: { increment: 1 } }
   });
 
-  const result = rollCoinflipWithChoice(choice);
+  const benefits = getMemberRoleBenefits(interaction.member);
+  const result = rollCoinflipWithChoice(choice, benefits.luckPercent);
   let grossPayout = 0;
   let taxRate = 0;
   let taxAmount = 0;
@@ -471,7 +487,8 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
     `本局結果：**${result.won ? '勝利' : '失敗'}**`,
     result.won ? `稅前獎金：**${formatCoins(grossPayout)}**` : `本局獲得：**${formatCoins(0)}**`,
     result.won ? `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）` : null,
-    result.won ? `實收獎金：**${formatCoins(payout)}**` : null
+    result.won ? `實收獎金：**${formatCoins(payout)}**` : null,
+    benefits.luckPercent > 0 ? `角色幸運值：**+${benefits.luckPercent}%**` : null
   ].filter(Boolean));
 
   if (result.won && payout > 0) {
@@ -485,8 +502,9 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
         `硬幣結果：**${result.resultLabel}**`,
         `稅前獎金：**${formatCoins(grossPayout)}**`,
         `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）`,
-        `實收獎金：**${formatCoins(payout)}**`
-      ]
+        `實收獎金：**${formatCoins(payout)}**`,
+        benefits.luckPercent > 0 ? `角色幸運值：**+${benefits.luckPercent}%**` : null
+      ].filter(Boolean)
     });
   }
 
@@ -497,6 +515,7 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
       `下注金額：**${formatCoins(bet)}**`,
       `你的選擇：**${result.choiceLabel}**`,
       `硬幣結果：**${result.resultLabel}**`,
+      benefits.luckPercent > 0 ? `角色加成：**${formatBenefitLine(benefits)}**` : null,
       '',
       `結果：${result.won ? '**你贏了！**' : '**你輸了。**'}`,
       result.won
@@ -506,7 +525,7 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
             `實收獎金：**${formatCoins(payout)}**。`
           ].join('\n')
         : `你失去了 **${formatCoins(bet)}**。`
-    ].join('\n'));
+    ].filter(line => line !== null).join('\n'));
 
   return respondPrivate(interaction, { embeds: [embed] });
 }
@@ -626,13 +645,18 @@ async function handlePanelButton(interaction) {
   }
 
   if (game === 'fish' && action === 'start') {
+    const benefits = getMemberRoleBenefits(interaction.member);
+    const effectiveCooldownMs = applyFishingCooldownReduction(fishingConfig.cooldownMs, benefits);
+
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
       .setTitle('🎣 釣魚確認')
       .setDescription([
         '本次釣魚成本：**免費**',
-        '冷卻時間：**1 小時 30 分鐘**',
+        `目前冷卻時間：**${formatDuration(effectiveCooldownMs)}**`,
+        `角色加成：**${formatBenefitLine(benefits)}**`,
         '魚類會自動出售成金幣。',
+        '隱藏鑽石不受角色幸運值影響。',
         '',
         '你確定要開始釣魚嗎？'
       ].join('\n'));

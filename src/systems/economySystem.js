@@ -1,8 +1,9 @@
 const prisma = require('../database/prisma');
 const { STARTING_COINS } = require('../config/economyConfig');
+const { settleMaturePendingJkForUserId } = require('./pendingJkSystem');
 
 async function getOrCreateUser(discordUser) {
-  return prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { discordId: discordUser.id },
     update: { username: discordUser.username },
     create: {
@@ -14,6 +15,8 @@ async function getOrCreateUser(discordUser) {
       selectedRod: 'basic'
     }
   });
+
+  return settleMaturePendingJkForUserId(user.id);
 }
 
 async function getBalance(discordUser) {

@@ -1,5 +1,6 @@
 const { MessageFlags } = require('discord.js');
 const { handlePanelButton, handlePanelModal, handlePanelSelect } = require('../systems/gamePanelSystem');
+const { handleRoleShopSelect } = require('../systems/roleShopPanelSystem');
 
 module.exports = {
   name: 'interactionCreate',
@@ -44,6 +45,10 @@ module.exports = {
       if (interaction.isStringSelectMenu()) {
         if (interaction.customId.startsWith('setup_panel_select:')) {
           return await handlePanelSelect(interaction);
+        }
+
+        if (interaction.customId.startsWith('role_shop_select:')) {
+          return await handleRoleShopSelect(interaction);
         }
       }
 
