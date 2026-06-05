@@ -7,30 +7,43 @@ const { getPendingJkSummaryByUserId } = require('../systems/pendingJkSystem');
 const { getMemberRoleBenefits, formatBenefitLine } = require('../systems/roleBenefitSystem');
 
 const JK_TO_COINS_RATE = 1000;
-
-function percent(numerator, denominator) {
-  if (!denominator || denominator <= 0) return '0.00%';
-  return `${((numerator / denominator) * 100).toFixed(2)}%`;
-}
+const GAME_TRANSACTION_TYPES = ['COINFLIP', 'SLOTS', 'MINES', 'FISHING'];
 
 function isRefundTransaction(tx) {
   const reason = tx.reason || '';
   return reason.includes('退回') || reason.includes('退款') || reason.includes('退出') || reason.includes('本金');
 }
 
-function countWins(transactions, type) {
+function getPositiveGameTransactions(transactions, type, currency = 'COINS') {
   return transactions.filter(tx =>
     tx.type === type &&
-    tx.currency === 'COINS' &&
+    tx.currency === currency &&
     tx.amount > 0 &&
     !isRefundTransaction(tx)
-  ).length;
+  );
+}
+
+function countGameWins(transactions, type) {
+  const coinWins = getPositiveGameTransactions(transactions, type, 'COINS').length;
+  const jkWins = getPositiveGameTransactions(transactions, type, 'JK').length;
+  return coinWins + jkWins;
+}
+
+function sumPositiveGameAmount(transactions, currency) {
+  return transactions
+    .filter(tx =>
+      GAME_TRANSACTION_TYPES.includes(tx.type) &&
+      tx.currency === currency &&
+      tx.amount > 0 &&
+      !isRefundTransaction(tx)
+    )
+    .reduce((sum, tx) => sum + tx.amount, 0);
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('profile')
-    .setDescription('查看玩家公開資料：總資產、遊戲次數與勝率')
+    .setDescription('查看玩家公開資料：總資產、勝利次數與遊戲獲得金額')
     .addUserOption(option =>
       option
         .setName('user')
@@ -44,12 +57,14 @@ module.exports = {
     const target = interaction.options.getUser('user') || interaction.user;
     const user = await getOrCreateUser(target);
     const pending = await getPendingJkSummaryByUserId(user.id);
+
     let targetMember = null;
     try {
       targetMember = await interaction.guild.members.fetch(target.id);
     } catch {
       targetMember = null;
     }
+
     const benefits = getMemberRoleBenefits(targetMember);
 
     const transactions = await prisma.transaction.findMany({
@@ -65,13 +80,17 @@ module.exports = {
     const selectedRod = rods[user.selectedRod] || rods.basic;
     const totalWealth = user.coins + user.jkBalance * JK_TO_COINS_RATE + pending.pendingCoins;
 
-    const coinflipWins = countWins(transactions, 'COINFLIP');
-    const slotsWins = countWins(transactions, 'SLOTS');
-    const minesWins = countWins(transactions, 'MINES');
+    const coinflipWins = countGameWins(transactions, 'COINFLIP');
+    const slotsWins = countGameWins(transactions, 'SLOTS');
+    const minesWins = countGameWins(transactions, 'MINES');
+    const fishingRewards = countGameWins(transactions, 'FISHING');
 
     const casinoGamesPlayed = user.coinflipPlayed + user.slotsPlayed + user.minesPlayed;
-    const casinoWins = coinflipWins + slotsWins + minesWins;
     const allGamesPlayed = casinoGamesPlayed + user.fishingCount;
+
+    const totalGameWonCoins = sumPositiveGameAmount(transactions, 'COINS');
+    const totalGameWonJk = sumPositiveGameAmount(transactions, 'JK');
+    const totalGameWonEstimatedCoins = totalGameWonCoins + totalGameWonJk * JK_TO_COINS_RATE;
 
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
@@ -79,7 +98,8 @@ module.exports = {
       .setDescription([
         `玩家：<@${target.id}>`,
         '',
-        '此頁只顯示公開統計，不顯示玩家贏了或輸了多少金額。'
+        '此頁只顯示公開資料、勝利次數與遊戲獲得金額。',
+        '不顯示失敗扣款、不顯示虧損、不顯示勝率。'
       ].join('\n'))
       .addFields(
         {
@@ -94,21 +114,31 @@ module.exports = {
           inline: false
         },
         {
-          name: '🎮 總遊戲資料',
+          name: '🎮 遊戲總覽',
           value: [
             `總遊玩次數：**${formatNumber(allGamesPlayed)}** 次`,
             `賭場遊戲次數：**${formatNumber(casinoGamesPlayed)}** 次`,
-            `賭場總勝率：**${percent(casinoWins, casinoGamesPlayed)}**`
+            `釣魚次數：**${formatNumber(user.fishingCount)}** 次`
           ].join('\n'),
           inline: false
         },
         {
-          name: '📊 各遊戲勝率',
+          name: '🏆 各遊戲勝利 / 獲得次數',
           value: [
-            `硬幣翻轉：**${formatNumber(user.coinflipPlayed)}** 次｜勝率 **${percent(coinflipWins, user.coinflipPlayed)}**`,
-            `老虎機：**${formatNumber(user.slotsPlayed)}** 次｜勝率 **${percent(slotsWins, user.slotsPlayed)}**`,
-            `踩地雷：**${formatNumber(user.minesPlayed)}** 次｜勝率 **${percent(minesWins, user.minesPlayed)}**`,
-            `釣魚：**${formatNumber(user.fishingCount)}** 次｜不計入勝率`
+            `硬幣翻轉勝利：**${formatNumber(coinflipWins)}** 次`,
+            `老虎機勝利：**${formatNumber(slotsWins)}** 次`,
+            `踩地雷成功領取：**${formatNumber(minesWins)}** 次`,
+            `釣魚獲得獎勵：**${formatNumber(fishingRewards)}** 次`
+          ].join('\n'),
+          inline: false
+        },
+        {
+          name: '💵 遊戲獲得總額',
+          value: [
+            `獲得金幣總額：**${formatCoins(totalGameWonCoins)}**`,
+            `獲得 JK餘額總額：**${formatJK(totalGameWonJk)}**`,
+            `遊戲獲得估值：**${formatCoins(totalGameWonEstimatedCoins)}**`,
+            '此數字只統計成功獲得的金額，不扣除失敗或下注成本。'
           ].join('\n'),
           inline: false
         },
@@ -127,12 +157,12 @@ module.exports = {
           name: '🎣 釣魚資料',
           value: [
             `目前釣竿：**${selectedRod.label || selectedRod.name || user.selectedRod}**`,
-            '釣竿只顯示目前裝備，不公開釣魚收益金額。'
+            '隱藏鑽石不受幸運值加成影響。'
           ].join('\n'),
           inline: false
         }
       )
-      .setFooter({ text: '公開資料不包含個別交易金額或總盈虧。' })
+      .setFooter({ text: '公開資料不包含失敗扣款、虧損或勝率。' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });
