@@ -43,7 +43,7 @@ function sumPositiveGameAmount(transactions, currency) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('profile')
-    .setDescription('查看玩家公開資料：總資產、勝利次數與遊戲獲得金額')
+    .setDescription('查看玩家資料')
     .addUserOption(option =>
       option
         .setName('user')
@@ -137,8 +137,7 @@ module.exports = {
           value: [
             `獲得金幣總額：**${formatCoins(totalGameWonCoins)}**`,
             `獲得 JK餘額總額：**${formatJK(totalGameWonJk)}**`,
-            `遊戲獲得估值：**${formatCoins(totalGameWonEstimatedCoins)}**`,
-            '此數字只統計成功獲得的金額，不扣除失敗或下注成本。'
+            `遊戲獲得估值：**${formatCoins(totalGameWonEstimatedCoins)}**`
           ].join('\n'),
           inline: false
         },
@@ -162,7 +161,6 @@ module.exports = {
           inline: false
         }
       )
-      .setFooter({ text: '公開資料不包含失敗扣款、虧損或勝率。' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });
