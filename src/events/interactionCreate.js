@@ -1,6 +1,7 @@
 const { MessageFlags } = require('discord.js');
 const { handlePanelButton, handlePanelModal, handlePanelSelect } = require('../systems/gamePanelSystem');
 const { handleRoleShopSelect } = require('../systems/roleShopPanelSystem');
+const { handleCommentButton, handleCommentModal } = require('../systems/commentSystem');
 
 module.exports = {
   name: 'interactionCreate',
@@ -40,6 +41,10 @@ module.exports = {
           if (!command || !command.handleActionButton) return;
           return await command.handleActionButton(interaction);
         }
+
+        if (interaction.customId.startsWith('comment:')) {
+          return await handleCommentButton(interaction);
+        }
       }
 
       if (interaction.isStringSelectMenu()) {
@@ -55,6 +60,10 @@ module.exports = {
       if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('setup_modal:')) {
           return await handlePanelModal(interaction);
+        }
+
+        if (interaction.customId.startsWith('comment_modal:')) {
+          return await handleCommentModal(interaction);
         }
       }
     } catch (error) {

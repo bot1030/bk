@@ -22,11 +22,11 @@ const { rollCoinflipWithChoice, rollSlots, calculatePayout, faceLabel } = requir
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('./riskSystem');
 const { announceBigWin } = require('./bigWinSystem');
 const { validateBet } = require('../utils/guards');
-const { randomInt } = require('../utils/random');
 const { getRemainingCooldown } = require('../utils/cooldown');
 const { formatCoins, formatJK, formatDuration } = require('../utils/format');
 const { createConvertUi } = require('../commands/convert');
 const { checkDailyFarmingWarning } = require('./dailyFarmingMonitorSystem');
+const { rollDailyBaseReward, getDailyRewardChanceText } = require('./dailyRewardSystem');
 const {
   createBoard,
   buildMinesComponents,
@@ -160,6 +160,7 @@ function buildDailyPanel() {
       '',
       '📌 **規則**',
       `基礎獎勵範圍：**${formatCoins(DAILY_REWARD_MIN)}–${formatCoins(DAILY_REWARD_MAX)}**`,
+      getDailyRewardChanceText(),
       '角色每日加成可疊加，最高 **+30%**。',
       'Server Booster 額外提供 **+15% 每日獎勵**，會列入 +30% 上限。',
       '冷卻時間：**24 小時**',
@@ -426,9 +427,9 @@ async function claimDailyFromPanel(interaction) {
   }
 
   const benefits = getMemberRoleBenefits(interaction.member);
-  const baseReward = randomInt(DAILY_REWARD_MIN, DAILY_REWARD_MAX);
+  const baseReward = rollDailyBaseReward();
   const reward = applyDailyBoost(baseReward, benefits);
-  await addCoins(interaction.user, reward, 'DAILY', `每日獎勵｜基礎 ${baseReward}｜加成 +${benefits.dailyBoostPercent}%`);
+  const updatedUser = await addCoins(interaction.user, reward, 'DAILY', `每日獎勵｜基礎 ${baseReward}｜加成 +${benefits.dailyBoostPercent}%`);
 
   await prisma.user.update({
     where: { discordId: interaction.user.id },
@@ -442,6 +443,7 @@ async function claimDailyFromPanel(interaction) {
       `基礎獎勵：**${formatCoins(baseReward)}**`,
       `角色加成：**+${benefits.dailyBoostPercent}%**`,
       `本次獲得：**${formatCoins(reward)}**`,
+      `目前金幣：**${formatCoins(updatedUser.coins)}**`,
       '',
       `目前加成：${formatBenefitLine(benefits)}`,
       '明天再回來領取獎勵。'
