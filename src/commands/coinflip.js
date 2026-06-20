@@ -34,11 +34,11 @@ function formatTaxRate(rate) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('coinflip')
-    .setDescription('投下注碼並選擇硬幣正面或反面')
+    .setDescription('投投入碼並選擇硬幣正面或反面')
     .addIntegerOption(option =>
       option
         .setName('bet')
-        .setDescription('下注金額：100–100,000 金幣')
+        .setDescription('投入金額：100–100,000 金幣')
         .setRequired(true)
         .setMinValue(gamblingConfig.coinflip.minBet)
         .setMaxValue(gamblingConfig.coinflip.maxBet)
@@ -68,7 +68,7 @@ module.exports = {
       return interaction.reply(privatePayload({ content: risk.message }));
     }
 
-    const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉下注');
+    const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉投入');
     if (!spent.ok) {
       return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
     }
@@ -95,7 +95,7 @@ module.exports = {
     }
 
     await sendPostGameRiskAlert(interaction.client, interaction.user, '硬幣翻轉', [
-      `本局下注：**${formatCoins(bet)}**`,
+      `本局投入：**${formatCoins(bet)}**`,
       `本局結果：**${result.won ? '勝利' : '失敗'}**`,
       result.won ? `稅前獎金：**${formatCoins(grossPayout)}**` : `本局獲得：**${formatCoins(0)}**`,
       result.won ? `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）` : null,
@@ -109,7 +109,7 @@ module.exports = {
         gameName: '硬幣翻轉',
         coins: payout,
         detailLines: [
-          `下注金額：**${formatCoins(bet)}**`,
+          `投入金額：**${formatCoins(bet)}**`,
           `玩家選擇：**${result.choiceLabel}**`,
           `硬幣結果：**${result.resultLabel}**`,
           `稅前獎金：**${formatCoins(grossPayout)}**`,
@@ -124,7 +124,7 @@ module.exports = {
       .setColor(result.won ? 0x2ecc71 : 0xe74c3c)
       .setTitle('🪙 硬幣翻轉')
       .setDescription([
-        `下注金額：**${formatCoins(bet)}**`,
+        `投入金額：**${formatCoins(bet)}**`,
         `你的選擇：**${result.choiceLabel}**`,
         `硬幣結果：**${result.resultLabel}**`,
         benefits.luckPercent > 0 ? `角色加成：**${formatBenefitLine(benefits)}**` : null,

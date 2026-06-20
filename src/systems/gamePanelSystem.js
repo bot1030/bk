@@ -24,7 +24,7 @@ const { announceBigWin } = require('./bigWinSystem');
 const { validateBet } = require('../utils/guards');
 const { getRemainingCooldown } = require('../utils/cooldown');
 const { formatCoins, formatJK, formatDuration } = require('../utils/format');
-const { createConvertUi } = require('../commands/convert');
+const { createConvertSessionUi } = require('../commands/convert');
 const { checkDailyFarmingWarning } = require('./dailyFarmingMonitorSystem');
 const { rollDailyBaseReward, getDailyRewardChanceText } = require('./dailyRewardSystem');
 const {
@@ -186,19 +186,19 @@ function buildDailyPanel() {
 function buildConvertPanel() {
   const embed = new EmbedBuilder()
     .setColor(0x3498db)
-    .setTitle('🔁 貨幣兌換')
+    .setTitle('🔁 兌換餘額')
     .setDescription([
-      '在金幣與 JK餘額之間進行兌換。',
+      '點擊下方按鈕後，系統會開啟私人兌換介面。',
+      '',
+      '你可以在介面中選擇：',
+      '把：**金幣 / JK餘額**',
+      '換成：**金幣 / JK餘額**',
       '',
       '💱 **兌換比例**',
       '**1,000 金幣 = 1 JK餘額**',
       '**1 JK餘額 = 1,000 金幣**',
       '',
-      '🎮 **玩法**',
-      '點擊下方按鈕後，輸入你要兌換的數量。',
-      '系統會開啟私人兌換介面，讓你選擇「把什麼貨幣」換成「什麼貨幣」。',
-      '',
-      '⚠️ 金幣換成 JK餘額時，金幣數量必須是 1,000 的倍數。',
+      '⚠️ 金幣換成 JK餘額時，金幣數量必須是 **1,000** 的倍數。',
       '金幣換成 JK餘額後會先進入 **待結算 JK餘額** 24 小時。',
       '待結算期間仍可被 **幻影怪盜** 偷竊；正式結算後才受保護。'
     ].join('\n'));
@@ -270,17 +270,17 @@ function buildCoinflipPanel() {
     .setColor(0xf1c40f)
     .setTitle('🪙 硬幣翻轉')
     .setDescription([
-      '選擇正面或反面，然後輸入下注金額。',
+      '選擇正面或反面，然後輸入投入金額。',
       '',
       '📌 **規則**',
-      `下注範圍：**${formatCoins(gamblingConfig.coinflip.minBet)}–${formatCoins(gamblingConfig.coinflip.maxBet)}**`,
-      '猜中後獲得 **2x 下注金額**，但會先扣除硬幣翻轉稅。',
+      `投入範圍：**${formatCoins(gamblingConfig.coinflip.minBet)}–${formatCoins(gamblingConfig.coinflip.maxBet)}**`,
+      '猜中後獲得 **2x 投入金額**，但會先扣除硬幣翻轉稅。',
       '所有中獎獎金固定扣除 **3% 稅**。',
-      '猜錯則失去下注金額。',
+      '猜錯則失去投入金額。',
       '',
       '🎮 **玩法**',
       '點擊下方按鈕選擇正面或反面。',
-      '系統會跳出輸入框，請輸入你要下注的金幣數量。'
+      '系統會跳出輸入框，請輸入你要投入的金幣數量。'
     ].join('\n'))
     .setFooter({ text: '實際中獎機率不會公開顯示。' });
 
@@ -307,12 +307,12 @@ function buildSlotsPanel() {
 
   const embed = new EmbedBuilder()
     .setColor(0xe67e22)
-    .setTitle('🎰 老虎機')
+    .setTitle('🎰 幸運轉盤')
     .setDescription([
-      '點擊下方按鈕後輸入下注金額，即可開始老虎機。',
+      '點擊下方按鈕後輸入投入金額，即可開始幸運轉盤。',
       '',
       '📌 **規則**',
-      `下注範圍：**${formatCoins(gamblingConfig.slots.minBet)}–${formatCoins(gamblingConfig.slots.maxBet)}**`,
+      `投入範圍：**${formatCoins(gamblingConfig.slots.minBet)}–${formatCoins(gamblingConfig.slots.maxBet)}**`,
       '系統會隨機產生三個圖案。',
       '不同結果會給予不同倍率獎勵。',
       '',
@@ -325,7 +325,7 @@ function buildSlotsPanel() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('setup_panel:slots:start')
-        .setLabel('開始老虎機')
+        .setLabel('開始幸運轉盤')
         .setStyle(ButtonStyle.Success)
         .setEmoji('🎰')
     )
@@ -342,14 +342,14 @@ function buildMinesPanel() {
     .setColor(0xe74c3c)
     .setTitle('💣 踩地雷')
     .setDescription([
-      '點擊下方按鈕後輸入下注金額與地雷數量。',
+      '點擊下方按鈕後輸入投入金額與地雷數量。',
       '',
       '📌 **規則**',
       '棋盤大小：**5x5**',
-      `下注範圍：**${formatCoins(gamblingConfig.mines.minBet)}–${formatCoins(gamblingConfig.mines.maxBet)}**`,
+      `投入範圍：**${formatCoins(gamblingConfig.mines.minBet)}–${formatCoins(gamblingConfig.mines.maxBet)}**`,
       `地雷數量：**${gamblingConfig.mines.minMines}–${gamblingConfig.mines.maxMines} 顆**`,
       '點到安全格會提高目前可提現倍率。',
-      '踩到地雷則失去本局下注。',
+      '踩到地雷則失去本局投入。',
       '',
       '💰 **如何提現 / 退出**',
       '遊戲開始後，遊戲介面內會有「提現」與「退出」按鈕。',
@@ -404,7 +404,7 @@ async function sendSetupPanel(interaction, channel, type) {
     convert: '貨幣兌換',
     fishrod: '釣竿商店',
     coinflip: '硬幣翻轉',
-    slots: '老虎機',
+    slots: '幸運轉盤',
     mines: '踩地雷'
   };
 
@@ -466,7 +466,7 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
   if (!risk.ok) return respondPrivate(interaction, { content: risk.message });
 
-  const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉下注');
+  const spent = await spendCoins(interaction.user, bet, 'COINFLIP', '硬幣翻轉投入');
   if (!spent.ok) return respondPrivate(interaction, { content: '❌ 你的金幣不足。' });
 
   await prisma.user.update({
@@ -491,7 +491,7 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
   }
 
   await sendPostGameRiskAlert(interaction.client, interaction.user, '硬幣翻轉', [
-    `本局下注：**${formatCoins(bet)}**`,
+    `本局投入：**${formatCoins(bet)}**`,
     `本局結果：**${result.won ? '勝利' : '失敗'}**`,
     result.won ? `稅前獎金：**${formatCoins(grossPayout)}**` : `本局獲得：**${formatCoins(0)}**`,
     result.won ? `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）` : null,
@@ -505,7 +505,7 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
       gameName: '硬幣翻轉',
       coins: payout,
       detailLines: [
-        `下注金額：**${formatCoins(bet)}**`,
+        `投入金額：**${formatCoins(bet)}**`,
         `玩家選擇：**${result.choiceLabel}**`,
         `硬幣結果：**${result.resultLabel}**`,
         `稅前獎金：**${formatCoins(grossPayout)}**`,
@@ -520,7 +520,7 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
     .setColor(result.won ? 0x2ecc71 : 0xe74c3c)
     .setTitle('🪙 硬幣翻轉')
     .setDescription([
-      `下注金額：**${formatCoins(bet)}**`,
+      `投入金額：**${formatCoins(bet)}**`,
       `你的選擇：**${result.choiceLabel}**`,
       `硬幣結果：**${result.resultLabel}**`,
       benefits.luckPercent > 0 ? `角色加成：**${formatBenefitLine(benefits)}**` : null,
@@ -547,7 +547,7 @@ async function executeSlotsFromPanel(interaction, bet) {
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
   if (!risk.ok) return respondPrivate(interaction, { content: risk.message });
 
-  const spent = await spendCoins(interaction.user, bet, 'SLOTS', '老虎機下注');
+  const spent = await spendCoins(interaction.user, bet, 'SLOTS', '幸運轉盤投入');
   if (!spent.ok) return respondPrivate(interaction, { content: '❌ 你的金幣不足。' });
 
   await prisma.user.update({
@@ -559,11 +559,11 @@ async function executeSlotsFromPanel(interaction, bet) {
   const payout = calculatePayout(bet, result.multiplier);
 
   if (payout > 0) {
-    await addCoins(interaction.user, payout, 'SLOTS', `老虎機結果：${result.label}`);
+    await addCoins(interaction.user, payout, 'SLOTS', `幸運轉盤結果：${result.label}`);
   }
 
-  await sendPostGameRiskAlert(interaction.client, interaction.user, '老虎機', [
-    `本局下注：**${formatCoins(bet)}**`,
+  await sendPostGameRiskAlert(interaction.client, interaction.user, '幸運轉盤', [
+    `本局投入：**${formatCoins(bet)}**`,
     `本局獎項：**${result.label}**`,
     `本局獲得：**${formatCoins(payout)}**`
   ]);
@@ -571,10 +571,10 @@ async function executeSlotsFromPanel(interaction, bet) {
   if (payout > 0) {
     await announceBigWin(interaction.client, interaction.guildId, {
       user: interaction.user,
-      gameName: '老虎機',
+      gameName: '幸運轉盤',
       coins: payout,
       detailLines: [
-        `下注金額：**${formatCoins(bet)}**`,
+        `投入金額：**${formatCoins(bet)}**`,
         `結果：**${visual.join(' | ')}**`,
         `獎項：**${result.label}**`,
         `倍率：**${result.multiplier}x**`
@@ -584,9 +584,9 @@ async function executeSlotsFromPanel(interaction, bet) {
 
   const embed = new EmbedBuilder()
     .setColor(payout > 0 ? 0x2ecc71 : 0xe74c3c)
-    .setTitle('🎰 老虎機')
+    .setTitle('🎰 幸運轉盤')
     .setDescription([
-      `下注金額：**${formatCoins(bet)}**`,
+      `投入金額：**${formatCoins(bet)}**`,
       '',
       `結果：**${visual.join(' | ')}**`,
       '',
@@ -608,7 +608,7 @@ function buildMinesEmbed(game, title = '💣 踩地雷') {
     .setColor(0xf39c12)
     .setTitle(title)
     .setDescription([
-      `下注金額：**${formatCoins(game.bet)}**`,
+      `投入金額：**${formatCoins(game.bet)}**`,
       `地雷數量：**${game.mines}**`,
       `安全點擊：**${safePicks}**`,
       `目前倍率：**${multiplier}x**`,
@@ -637,19 +637,7 @@ async function handlePanelButton(interaction) {
   }
 
   if (game === 'convert' && action === 'start') {
-    const modal = new ModalBuilder()
-      .setCustomId('setup_modal:convert:start')
-      .setTitle('貨幣兌換｜輸入兌換數量');
-
-    const amountInput = new TextInputBuilder()
-      .setCustomId('amount')
-      .setLabel('請輸入要兌換的數量')
-      .setPlaceholder('例如：1000 或 5')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
-    return interaction.showModal(modal);
+    return interaction.reply(privatePayload(createConvertSessionUi(interaction.user.id)));
   }
 
   if (game === 'fish' && action === 'start') {
@@ -683,7 +671,7 @@ async function handlePanelButton(interaction) {
 
     const betInput = new TextInputBuilder()
       .setCustomId('bet')
-      .setLabel('請輸入下注金額')
+      .setLabel('請輸入投入金額')
       .setPlaceholder(`${gamblingConfig.coinflip.minBet}–${gamblingConfig.coinflip.maxBet}`)
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
@@ -695,11 +683,11 @@ async function handlePanelButton(interaction) {
   if (game === 'slots' && action === 'start') {
     const modal = new ModalBuilder()
       .setCustomId('setup_modal:slots:start')
-      .setTitle('老虎機｜輸入下注金額');
+      .setTitle('幸運轉盤｜輸入投入金額');
 
     const betInput = new TextInputBuilder()
       .setCustomId('bet')
-      .setLabel('請輸入下注金額')
+      .setLabel('請輸入投入金額')
       .setPlaceholder(`${gamblingConfig.slots.minBet}–${gamblingConfig.slots.maxBet}`)
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
@@ -716,11 +704,11 @@ async function handlePanelButton(interaction) {
   if (game === 'mines' && action === 'start') {
     const modal = new ModalBuilder()
       .setCustomId('setup_modal:mines:start')
-      .setTitle('踩地雷｜輸入下注與地雷數量');
+      .setTitle('踩地雷｜輸入投入與地雷數量');
 
     const betInput = new TextInputBuilder()
       .setCustomId('bet')
-      .setLabel('請輸入下注金額')
+      .setLabel('請輸入投入金額')
       .setPlaceholder(`${gamblingConfig.mines.minBet}–${gamblingConfig.mines.maxBet}`)
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
@@ -771,22 +759,18 @@ async function handlePanelModal(interaction) {
   const [, game, action] = interaction.customId.split(':');
 
   if (game === 'convert') {
-    const amount = parsePositiveInteger(interaction.fields.getTextInputValue('amount'));
-    if (!amount) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的兌換數量。' }));
-
-    const ui = createConvertUi(interaction.user.id, amount);
-    return interaction.reply(privatePayload(ui));
+    return interaction.reply(privatePayload(createConvertSessionUi(interaction.user.id)));
   }
 
   if (game === 'coinflip') {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
-    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的下注金額。' }));
+    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的投入金額。' }));
     return executeCoinflipFromPanel(interaction, action, bet);
   }
 
   if (game === 'slots') {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
-    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的下注金額。' }));
+    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的投入金額。' }));
     return executeSlotsFromPanel(interaction, bet);
   }
 
@@ -794,7 +778,7 @@ async function handlePanelModal(interaction) {
     const bet = parsePositiveInteger(interaction.fields.getTextInputValue('bet'));
     const mineCount = parsePositiveInteger(interaction.fields.getTextInputValue('mines'));
 
-    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的下注金額。' }));
+    if (!bet) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的投入金額。' }));
     if (!mineCount) return interaction.reply(privatePayload({ content: '❌ 請輸入有效的地雷數量。' }));
 
     return executeMinesFromPanel(interaction, bet, mineCount);

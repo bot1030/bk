@@ -20,7 +20,7 @@ function isAdmin(userId) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('cc')
-    .setDescription('查看賭場控制中心統計資料'),
+    .setDescription('查看遊戲中心控制中心統計資料'),
 
   async execute(interaction) {
     if (!isAdmin(interaction.user.id)) {
@@ -33,7 +33,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(stats.totalCasinoProfit >= 0 ? 0x2ecc71 : 0xe74c3c)
-      .setTitle('📊 賭場控制中心 / CC')
+      .setTitle('📊 遊戲中心控制中心 / CC')
       .setDescription([
         `統計範圍：**全部資料**`,
         `排除使用者：**${EXCLUDED_USER_IDS.join(', ')}**`,
@@ -42,10 +42,11 @@ module.exports = {
         '',
         `遊戲與釣竿淨利：**${formatCoins(stats.totalCasinoProfitBeforeOperatingLosses)}**`,
         `硬幣翻轉扣稅收入：**+${formatCoins(stats.coinflipTaxCollected)}**（已包含在上方淨利）`,
-        `營運發放成本：**-${formatCoins(stats.operatingLosses.totalLoss)}**`,
-        `賭場總淨利：**${formatCoins(stats.totalCasinoProfit)}**`
+        `營運發放成本：**-${formatCoins(stats.operatingLosses.totalGrossLoss)}**`,
+        `管理員刪除回收：**+${formatCoins(stats.operatingLosses.adminDeleteRecovery)}**`,
+        `遊戲中心總淨利：**${formatCoins(stats.totalCasinoProfit)}**`
       ].join('\n'))
-      .setFooter({ text: '資料不包含管理員與指定排除使用者。正數代表賭場賺，負數代表玩家整體賺。' })
+      .setFooter({ text: '資料不包含管理員與指定排除使用者。正數代表遊戲中心賺，負數代表玩家整體賺。' })
       .setTimestamp(stats.generatedAt);
 
     for (const game of stats.games) {
@@ -63,7 +64,9 @@ module.exports = {
           `新玩家起始金幣：**${formatNumber(stats.operatingLosses.startingBonusUsers)} 人 × ${formatCoins(stats.operatingLosses.startingBonusPerUser)} = ${formatCoins(stats.operatingLosses.startingBonusLoss)}**`,
           `每日獎勵發放：**${formatCoins(stats.operatingLosses.dailyLoss)}**`,
           `管理員新增發放：**${formatCoins(stats.operatingLosses.adminGiveawayLoss)}**`,
-          `總發放成本：**${formatCoins(stats.operatingLosses.totalLoss)}**`
+          `發放成本小計：**${formatCoins(stats.operatingLosses.totalGrossLoss)}**`,
+          `管理員刪除回收：**-${formatCoins(stats.operatingLosses.adminDeleteRecovery)}**`,
+          `最終營運成本：**${formatCoins(stats.operatingLosses.totalLoss)}**`
         ].join('\n'),
         inline: false
       },
@@ -81,7 +84,7 @@ module.exports = {
         name: '🧾 硬幣翻轉稅收',
         value: [
           `扣稅收入：**${formatCoins(stats.coinflipTaxCollected)}**`,
-          '此金額已經包含在硬幣翻轉與賭場總淨利內，不會重複加算。'
+          '此金額已經包含在硬幣翻轉與遊戲中心總淨利內，不會重複加算。'
         ].join('\n'),
         inline: false
       },
@@ -103,7 +106,7 @@ module.exports = {
           `購買玩家：**${formatNumber(stats.rods.players)}**`,
           `購買次數：**${formatNumber(stats.rods.purchases)}**`,
           `玩家花費：**${formatCoins(stats.rods.coinsSpent)}**`,
-          `計入賭場收入：**+${formatCoins(stats.rodCasinoProfit)}**`
+          `計入遊戲中心收入：**+${formatCoins(stats.rodCasinoProfit)}**`
         ].join('\n'),
         inline: false
       },
@@ -115,6 +118,17 @@ module.exports = {
           `金幣發放：**${formatCoins(stats.adminGiveaways.coinsPaid)}**`,
           `JK發放：**${formatJK(stats.adminGiveaways.jkPaid)}**`,
           `折算總成本：**${formatCoins(stats.adminGiveaways.coinValuePaid)}**`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '🗑️ 管理員刪除回收',
+        value: [
+          `被刪除玩家：**${formatNumber(stats.adminDeletes.players)}**`,
+          `刪除筆數：**${formatNumber(stats.adminDeletes.entries)}**`,
+          `金幣刪除：**${formatCoins(stats.adminDeletes.coinsRemoved)}**`,
+          `JK刪除：**${formatJK(stats.adminDeletes.jkRemoved)}**`,
+          `折算回收總額：**${formatCoins(stats.adminDeletes.coinValueRemoved)}**`
         ].join('\n'),
         inline: false
       },

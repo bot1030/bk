@@ -18,10 +18,17 @@ module.exports = {
           return await handlePanelButton(interaction);
         }
 
-        if (interaction.customId.startsWith('convert:')) {
+        if (interaction.customId.startsWith('convert_btn:')) {
           const command = interaction.client.commands.get('兌換');
           if (!command || !command.handleButton) return;
           return await command.handleButton(interaction);
+        }
+
+        // Backward compatibility for older convert buttons already posted before this update.
+        if (interaction.customId.startsWith('convert:')) {
+          const command = interaction.client.commands.get('兌換');
+          if (!command || !command.execute) return;
+          return await command.execute(interaction);
         }
 
         if (interaction.customId.startsWith('fish:')) {
@@ -55,6 +62,12 @@ module.exports = {
         if (interaction.customId.startsWith('role_shop_select:')) {
           return await handleRoleShopSelect(interaction);
         }
+
+        if (interaction.customId.startsWith('convert_select:')) {
+          const command = interaction.client.commands.get('兌換');
+          if (!command || !command.handleSelect) return;
+          return await command.handleSelect(interaction);
+        }
       }
 
       if (interaction.isModalSubmit()) {
@@ -64,6 +77,12 @@ module.exports = {
 
         if (interaction.customId.startsWith('comment_modal:')) {
           return await handleCommentModal(interaction);
+        }
+
+        if (interaction.customId.startsWith('convert_modal:')) {
+          const command = interaction.client.commands.get('兌換');
+          if (!command || !command.handleModal) return;
+          return await command.handleModal(interaction);
         }
       }
     } catch (error) {

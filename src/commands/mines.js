@@ -58,7 +58,7 @@ function buildMinesEmbed(game, title = '💣 踩地雷', revealAll = false) {
     .setColor(revealAll ? 0x95a5a6 : 0xf39c12)
     .setTitle(title)
     .setDescription([
-      `下注金額：**${formatCoins(game.bet)}**`,
+      `投入金額：**${formatCoins(game.bet)}**`,
       `地雷數量：**${game.mines}**`,
       `安全點擊：**${safePicks}**`,
       `目前倍率：**${multiplier}x**`,
@@ -97,7 +97,7 @@ async function startMinesGame(interaction, bet, mineCount) {
   const risk = await checkGamblingBetAllowed(interaction.user, bet);
   if (!risk.ok) return sendOrEditPrivate(interaction, { content: risk.message });
 
-  const spent = await spendCoins(interaction.user, bet, 'MINES', '踩地雷下注');
+  const spent = await spendCoins(interaction.user, bet, 'MINES', '踩地雷投入');
   if (!spent.ok) return sendOrEditPrivate(interaction, { content: '❌ 你的金幣不足。' });
 
   const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
@@ -173,7 +173,7 @@ async function cashOutGame(interaction, game) {
   await addCoins(interaction.user, payout, 'MINES', '踩地雷提現');
 
   await sendPostGameRiskAlert(interaction.client, interaction.user, '踩地雷', [
-    `本局下注：**${formatCoins(game.bet)}**`,
+    `本局投入：**${formatCoins(game.bet)}**`,
     `地雷數量：**${game.mines}**`,
     `安全點擊：**${revealed.length}**`,
     `本局獲得：**${formatCoins(payout)}**`
@@ -184,7 +184,7 @@ async function cashOutGame(interaction, game) {
     gameName: '踩地雷',
     coins: payout,
     detailLines: [
-      `下注金額：**${formatCoins(game.bet)}**`,
+      `投入金額：**${formatCoins(game.bet)}**`,
       `地雷數量：**${game.mines}**`,
       `安全點擊：**${revealed.length}**`,
       '狀態：**提現成功**'
@@ -294,7 +294,7 @@ module.exports = {
     .addIntegerOption(option =>
       option
         .setName('bet')
-        .setDescription('下注金額：100–100,000 金幣')
+        .setDescription('投入金額：100–100,000 金幣')
         .setRequired(true)
         .setMinValue(gamblingConfig.mines.minBet)
         .setMaxValue(gamblingConfig.mines.maxBet)
@@ -342,7 +342,7 @@ module.exports = {
         .setColor(0xe74c3c)
         .setTitle('💥 你踩到地雷了！')
         .setDescription([
-          `你失去了本次下注的 **${formatCoins(game.bet)}**。`,
+          `你失去了本次投入的 **${formatCoins(game.bet)}**。`,
           `地雷數量：**${game.mines}**`,
           '',
           '```',
@@ -364,7 +364,7 @@ module.exports = {
       await addCoins(interaction.user, payout, 'MINES', '踩地雷全清勝利');
 
       await sendPostGameRiskAlert(interaction.client, interaction.user, '踩地雷', [
-        `本局下注：**${formatCoins(game.bet)}**`,
+        `本局投入：**${formatCoins(game.bet)}**`,
         `本局地雷：**${game.mines}**`,
         `本局獲得：**${formatCoins(payout)}**`
       ]);
@@ -374,7 +374,7 @@ module.exports = {
         gameName: '踩地雷',
         coins: payout,
         detailLines: [
-          `下注金額：**${formatCoins(game.bet)}**`,
+          `投入金額：**${formatCoins(game.bet)}**`,
           `地雷數量：**${game.mines}**`,
           '狀態：**全部安全格已清除**'
         ]

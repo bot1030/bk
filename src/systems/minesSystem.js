@@ -182,8 +182,8 @@ async function checkMinesHighBetStreak(discordId, requestedBet) {
       message: [
         '⚠️ 風險控管啟動',
         '',
-        `你最近在高額踩地雷中連續獲利，系統暫時限制你繼續使用 **${cfg.minBet.toLocaleString()}–${cfg.maxBet.toLocaleString()} 金幣** 的高額下注。`,
-        `請等待一段時間，或改用較低下注金額。`
+        `你最近在高額踩地雷中連續獲利，系統暫時限制你繼續使用 **${cfg.minBet.toLocaleString()}–${cfg.maxBet.toLocaleString()} 金幣** 的高額投入。`,
+        `請等待一段時間，或改用較低投入金額。`
       ].join('\n')
     };
   }

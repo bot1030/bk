@@ -4,6 +4,11 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   MessageFlags
 } = require('discord.js');
 const { addCoins, spendCoins, spendJK, getBalance } = require('../systems/economySystem');
@@ -18,11 +23,13 @@ function privatePayload(payload = {}) {
 const CURRENCIES = {
   coins: {
     label: '金幣',
-    emoji: '🪙'
+    emoji: '🪙',
+    valueName: 'Coins'
   },
   jk: {
     label: 'JK餘額',
-    emoji: '💎'
+    emoji: '💎',
+    valueName: 'JK餘額'
   }
 };
 
@@ -38,203 +45,238 @@ function formatAmountByCurrency(currency, amount) {
   return currency === 'coins' ? formatCoins(amount) : formatJK(amount);
 }
 
-function buildCustomId(action, userId, amount, from, to) {
-  return `convert:${action}:${userId}:${amount}:${from}:${to}`;
+function parsePositiveInteger(raw) {
+  const cleaned = String(raw || '').replace(/[,，\s]/g, '');
+  if (!/^\d+$/.test(cleaned)) return null;
+  const value = Number(cleaned);
+  if (!Number.isSafeInteger(value) || value <= 0) return null;
+  return value;
 }
 
-function parseCustomId(customId) {
-  const [, action, userId, amountRaw, from, to] = customId.split(':');
-  return {
-    action,
-    userId,
-    amount: Number(amountRaw),
-    from,
-    to
-  };
+function buildSelectCustomId(kind, userId, from, to) {
+  return `convert_select:${kind}:${userId}:${from}:${to}`;
 }
 
-function buildConvertEmbed({ amount, from, to, status = null, color = 0x3498db }) {
+function buildButtonCustomId(action, userId, from, to) {
+  return `convert_btn:${action}:${userId}:${from}:${to}`;
+}
+
+function buildModalCustomId(userId, from, to) {
+  return `convert_modal:${userId}:${from}:${to}`;
+}
+
+function parseSelectCustomId(customId) {
+  const [, kind, userId, from, to] = customId.split(':');
+  return { kind, userId, from, to };
+}
+
+function parseButtonCustomId(customId) {
+  const [, action, userId, from, to] = customId.split(':');
+  return { action, userId, from, to };
+}
+
+function parseModalCustomId(customId) {
+  const [, userId, from, to] = customId.split(':');
+  return { userId, from, to };
+}
+
+function validateCurrency(value) {
+  return value === 'coins' || value === 'jk';
+}
+
+function buildConvertSessionEmbed({ from = 'coins', to = 'jk', status = null, color = 0x3498db } = {}) {
   const lines = [
-    '請使用下方按鈕設定兌換方向。',
+    '請先選擇兌換方向，再點擊 **開始兌換** 輸入數量。',
     '',
-    '📦 **兌換數量**',
-    `**${formatAmountByCurrency(from, amount)}**`,
-    '',
-    '🔁 **目前兌換方向**',
-    `**${currencyName(from)} ➜ ${currencyName(to)}**`,
+    `把：**${currencyName(from)}**`,
+    `換成：**${currencyName(to)}**`,
     '',
     '💱 **兌換比例**',
     `**${formatCoins(JK_CONVERSION_RATE)} = 1 JK餘額**`,
     `**1 JK餘額 = ${formatCoins(JK_CONVERSION_RATE)}**`,
     '',
-    '🕒 **重要規則**',
-    '金幣換成 JK餘額後會先進入 **待結算 JK餘額**。',
-    '待結算時間：**24 小時**。',
-    '待結算期間仍可被 **幻影怪盜** 偷竊。',
-    '24 小時後會自動轉為正式 JK餘額。',
-    '',
-    '✅ 確認前請看清楚方向，避免換錯貨幣。'
+    '🕒 **金幣換成 JK餘額**',
+    '會先進入 **待結算 JK餘額** 24 小時。',
+    '待結算期間仍可被 **幻影怪盜** 偷竊。'
   ];
 
-  if (status) {
-    lines.push('', status);
-  }
+  if (status) lines.push('', status);
 
   return new EmbedBuilder()
     .setColor(color)
-    .setTitle('🔁 貨幣兌換')
-    .setDescription(lines.join('\n'))
-    .setFooter({ text: '只有發起兌換的玩家可以操作此介面。' });
+    .setTitle('🔁 兌換餘額')
+    .setDescription(lines.join('\n'));
 }
 
-function buildComponents(userId, amount, from, to, disabled = false) {
+function currencyOption(value, currentValue) {
+  return new StringSelectMenuOptionBuilder()
+    .setLabel(CURRENCIES[value].label)
+    .setValue(value)
+    .setEmoji(CURRENCIES[value].emoji)
+    .setDescription(value === 'coins' ? '使用金幣作為兌換來源或目標' : '使用 JK餘額作為兌換來源或目標')
+    .setDefault(value === currentValue);
+}
+
+function buildConvertSessionComponents(userId, from = 'coins', to = 'jk', disabled = false) {
+  const fromMenu = new StringSelectMenuBuilder()
+    .setCustomId(buildSelectCustomId('from', userId, from, to))
+    .setPlaceholder(`把：${CURRENCIES[from].label}`)
+    .setDisabled(disabled)
+    .addOptions(currencyOption('coins', from), currencyOption('jk', from));
+
+  const toMenu = new StringSelectMenuBuilder()
+    .setCustomId(buildSelectCustomId('to', userId, from, to))
+    .setPlaceholder(`換成：${CURRENCIES[to].label}`)
+    .setDisabled(disabled)
+    .addOptions(currencyOption('coins', to), currencyOption('jk', to));
+
   return [
+    new ActionRowBuilder().addComponents(fromMenu),
+    new ActionRowBuilder().addComponents(toMenu),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(buildCustomId('toggle_from', userId, amount, from, to))
-        .setLabel(`把：${CURRENCIES[from].label}`)
-        .setEmoji(CURRENCIES[from].emoji)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(disabled),
-      new ButtonBuilder()
-        .setCustomId(buildCustomId('toggle_to', userId, amount, from, to))
-        .setLabel(`換成：${CURRENCIES[to].label}`)
-        .setEmoji(CURRENCIES[to].emoji)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(disabled),
-      new ButtonBuilder()
-        .setCustomId(buildCustomId('confirm', userId, amount, from, to))
-        .setLabel('確認兌換')
+        .setCustomId(buildButtonCustomId('start', userId, from, to))
+        .setLabel('開始兌換')
         .setEmoji('✅')
         .setStyle(ButtonStyle.Success)
-        .setDisabled(disabled),
+        .setDisabled(disabled || from === to),
       new ButtonBuilder()
-        .setCustomId(buildCustomId('cancel', userId, amount, from, to))
+        .setCustomId(buildButtonCustomId('cancel', userId, from, to))
         .setLabel('取消')
         .setEmoji('❌')
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(ButtonStyle.Secondary)
         .setDisabled(disabled)
     )
   ];
 }
 
-function createConvertUi(userId, amount, from = 'coins', to = 'jk') {
+function createConvertSessionUi(userId, from = 'coins', to = 'jk', status = null) {
   return {
-    embeds: [buildConvertEmbed({ amount, from, to })],
-    components: buildComponents(userId, amount, from, to)
+    embeds: [buildConvertSessionEmbed({ from, to, status })],
+    components: buildConvertSessionComponents(userId, from, to)
   };
+}
+
+// Backward compatibility for older panel code. Amount is ignored because the new UI asks amount after direction selection.
+function createConvertUi(userId) {
+  return createConvertSessionUi(userId);
+}
+
+async function assertOwner(interaction, userId) {
+  if (interaction.user.id !== userId) {
+    await interaction.reply(privatePayload({
+      content: '❌ 這不是你的兌換介面，請自己使用 /兌換 開啟新的介面。'
+    })).catch(() => null);
+    return false;
+  }
+  return true;
 }
 
 module.exports = {
   createConvertUi,
+  createConvertSessionUi,
   data: new SlashCommandBuilder()
     .setName('兌換')
-    .setDescription('開啟金幣與 JK餘額的兌換介面')
-    .addIntegerOption(option =>
-      option
-        .setName('amount')
-        .setDescription('要兌換的數量，會依照你在介面選擇的來源貨幣計算')
-        .setRequired(true)
-        .setMinValue(1)
-        .setMaxValue(100000000)
-    ),
+    .setDescription('開啟金幣與 JK餘額的兌換介面'),
 
   async execute(interaction) {
-    const amount = interaction.options.getInteger('amount');
-    const from = 'coins';
-    const to = 'jk';
+    return interaction.reply(privatePayload(createConvertSessionUi(interaction.user.id)));
+  },
 
-    const embed = buildConvertEmbed({ amount, from, to });
-    const components = buildComponents(interaction.user.id, amount, from, to);
+  async handleSelect(interaction) {
+    const state = parseSelectCustomId(interaction.customId);
+    if (!(await assertOwner(interaction, state.userId))) return;
 
-    return interaction.reply(privatePayload({ embeds: [embed], components }));
+    let { from, to } = state;
+    const selected = interaction.values?.[0];
+
+    if (!validateCurrency(from) || !validateCurrency(to) || !validateCurrency(selected)) {
+      return interaction.reply(privatePayload({ content: '❌ 兌換方向錯誤，請重新使用 /兌換。' })).catch(() => null);
+    }
+
+    if (state.kind === 'from') {
+      from = selected;
+      if (from === to) to = oppositeCurrency(from);
+    } else if (state.kind === 'to') {
+      to = selected;
+      if (from === to) from = oppositeCurrency(to);
+    } else {
+      return interaction.reply(privatePayload({ content: '❌ 無效的兌換選單。' })).catch(() => null);
+    }
+
+    return interaction.update(createConvertSessionUi(state.userId, from, to));
   },
 
   async handleButton(interaction) {
-    const state = parseCustomId(interaction.customId);
+    const state = parseButtonCustomId(interaction.customId);
+    if (!(await assertOwner(interaction, state.userId))) return;
 
-    if (interaction.user.id !== state.userId) {
-      return interaction.reply(privatePayload({
-        content: '❌ 這不是你的兌換介面，請自己使用 /兌換 開啟新的介面。'
-      })).catch(() => null);
-    }
-
-    let { amount, from, to } = state;
-
-    if (!Number.isInteger(amount) || amount <= 0) {
-      return interaction.reply(privatePayload({ content: '❌ 兌換數量錯誤，請重新使用 /兌換。' })).catch(() => null);
+    let { from, to } = state;
+    if (!validateCurrency(from) || !validateCurrency(to)) {
+      return interaction.reply(privatePayload({ content: '❌ 兌換方向錯誤，請重新使用 /兌換。' })).catch(() => null);
     }
 
     if (state.action === 'cancel') {
-      const embed = buildConvertEmbed({
-        amount,
+      const embed = buildConvertSessionEmbed({
         from,
         to,
         color: 0xe74c3c,
         status: '❌ **兌換已取消。**'
       });
-
-      return interaction.update({ embeds: [embed], components: buildComponents(state.userId, amount, from, to, true) });
+      return interaction.update({ embeds: [embed], components: buildConvertSessionComponents(state.userId, from, to, true) });
     }
 
-    if (state.action === 'toggle_from') {
-      from = oppositeCurrency(from);
-      if (from === to) to = oppositeCurrency(from);
-
-      const embed = buildConvertEmbed({ amount, from, to });
-      return interaction.update({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
-    }
-
-    if (state.action === 'toggle_to') {
-      to = oppositeCurrency(to);
-      if (from === to) from = oppositeCurrency(to);
-
-      const embed = buildConvertEmbed({ amount, from, to });
-      return interaction.update({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
-    }
-
-    if (state.action !== 'confirm') {
+    if (state.action !== 'start') {
       return interaction.reply(privatePayload({ content: '❌ 無效的兌換操作。' })).catch(() => null);
     }
 
-    await interaction.deferUpdate();
-
     if (from === to) {
-      const embed = buildConvertEmbed({
-        amount,
-        from,
-        to,
-        color: 0xe74c3c,
-        status: '❌ **不能把同一種貨幣兌換成自己。**'
-      });
-      return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
+      return interaction.reply(privatePayload({ content: '❌ 不能把同一種貨幣兌換成自己。' })).catch(() => null);
     }
 
-    // 金幣 -> 待結算 JK餘額
+    const modal = new ModalBuilder()
+      .setCustomId(buildModalCustomId(state.userId, from, to))
+      .setTitle(`兌換餘額｜${CURRENCIES[from].label} → ${CURRENCIES[to].label}`);
+
+    const amountInput = new TextInputBuilder()
+      .setCustomId('amount')
+      .setLabel(`請輸入要使用的${CURRENCIES[from].label}數量`)
+      .setPlaceholder(from === 'coins' ? '例如：1000、5000、10000' : '例如：1、5、10')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
+    return interaction.showModal(modal);
+  },
+
+  async handleModal(interaction) {
+    const state = parseModalCustomId(interaction.customId);
+    if (!(await assertOwner(interaction, state.userId))) return;
+
+    const { from, to } = state;
+    if (!validateCurrency(from) || !validateCurrency(to) || from === to) {
+      return interaction.reply(privatePayload({ content: '❌ 兌換方向錯誤，請重新使用 /兌換。' })).catch(() => null);
+    }
+
+    const amount = parsePositiveInteger(interaction.fields.getTextInputValue('amount'));
+    if (!amount) {
+      return interaction.reply(privatePayload({ content: '❌ 請輸入有效的兌換數量。' })).catch(() => null);
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     if (from === 'coins' && to === 'jk') {
       if (amount % JK_CONVERSION_RATE !== 0) {
-        const embed = buildConvertEmbed({
-          amount,
-          from,
-          to,
-          color: 0xe74c3c,
-          status: `❌ **金幣兌換成 JK餘額時，金幣數量必須是 ${formatCoins(JK_CONVERSION_RATE)} 的倍數。**\n例如：1,000、2,000、10,000 金幣。`
+        return interaction.editReply({
+          content: `❌ 金幣兌換成 JK餘額時，金幣數量必須是 ${formatCoins(JK_CONVERSION_RATE)} 的倍數。`
         });
-        return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
       }
 
       const jkAmount = Math.floor(amount / JK_CONVERSION_RATE);
       const spent = await spendCoins(interaction.user, amount, 'CONVERT', '金幣兌換成待結算 JK餘額');
 
       if (!spent.ok) {
-        const embed = buildConvertEmbed({
-          amount,
-          from,
-          to,
-          color: 0xe74c3c,
-          status: '❌ **你的金幣不足，無法完成兌換。**'
-        });
-        return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
+        return interaction.editReply({ content: '❌ 你的金幣不足，無法完成兌換。' });
       }
 
       const user = await getBalance(interaction.user);
@@ -247,38 +289,27 @@ module.exports = {
         .setColor(0x2ecc71)
         .setTitle('✅ 兌換成功｜待結算中')
         .setDescription([
-          '🔁 **兌換方向**',
-          `**${currencyName(from)} ➜ 待結算 JK餘額**`,
+          `把：**${currencyName(from)}**`,
+          `換成：**待結算 JK餘額**`,
           '',
-          `你使用了：**${formatCoins(amount)}**`,
+          `使用數量：**${formatCoins(amount)}**`,
           `待結算數量：**${formatJK(jkAmount)}**`,
           `結算時間：**${formatDuration(remainingMs)} 後**`,
-          '',
-          '⚠️ 待結算期間仍可被 **幻影怪盜** 偷竊。',
-          '正式結算後才會進入受保護的 JK餘額。',
           '',
           `目前金幣：**${formatCoins(updated.coins)}**`,
           `正式 JK餘額：**${formatJK(updated.jkBalance)}**`,
           `待結算 JK餘額：約 **${formatJK(Math.floor(pendingSummary.pendingCoins / JK_CONVERSION_RATE))}**`
         ].join('\n'));
 
-      return interaction.editReply({ embeds: [embed], components: [] });
+      return interaction.editReply({ embeds: [embed] });
     }
 
-    // 正式 JK餘額 -> 金幣
     if (from === 'jk' && to === 'coins') {
       const coinsAmount = amount * JK_CONVERSION_RATE;
       const spent = await spendJK(interaction.user, amount, 'CONVERT', 'JK餘額兌換成金幣');
 
       if (!spent.ok) {
-        const embed = buildConvertEmbed({
-          amount,
-          from,
-          to,
-          color: 0xe74c3c,
-          status: '❌ **你的正式 JK餘額不足，無法完成兌換。待結算 JK餘額不能提前使用。**'
-        });
-        return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
+        return interaction.editReply({ content: '❌ 你的正式 JK餘額不足，無法完成兌換。待結算 JK餘額不能提前使用。' });
       }
 
       await addCoins(interaction.user, coinsAmount, 'CONVERT', 'JK餘額兌換成金幣');
@@ -288,26 +319,19 @@ module.exports = {
         .setColor(0x2ecc71)
         .setTitle('✅ 兌換成功')
         .setDescription([
-          '🔁 **兌換方向**',
-          `**${currencyName(from)} ➜ ${currencyName(to)}**`,
+          `把：**${currencyName(from)}**`,
+          `換成：**${currencyName(to)}**`,
           '',
-          `你使用了：**${formatJK(amount)}**`,
-          `你獲得了：**${formatCoins(coinsAmount)}**`,
+          `使用數量：**${formatJK(amount)}**`,
+          `獲得數量：**${formatCoins(coinsAmount)}**`,
           '',
           `目前金幣：**${formatCoins(updated.coins)}**`,
           `目前 JK餘額：**${formatJK(updated.jkBalance)}**`
         ].join('\n'));
 
-      return interaction.editReply({ embeds: [embed], components: [] });
+      return interaction.editReply({ embeds: [embed] });
     }
 
-    const embed = buildConvertEmbed({
-      amount,
-      from,
-      to,
-      color: 0xe74c3c,
-      status: '❌ **兌換設定錯誤，請重新選擇貨幣。**'
-    });
-    return interaction.editReply({ embeds: [embed], components: buildComponents(state.userId, amount, from, to) });
+    return interaction.editReply({ content: '❌ 兌換設定錯誤，請重新選擇貨幣。' });
   }
 };

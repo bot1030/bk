@@ -231,7 +231,7 @@ async function logAntiMartingaleBlock(user, analysis, requestedBet) {
         amount: 0,
         balanceBefore: user.coins,
         balanceAfter: user.coins,
-        reason: `倍投法風險控管：${analysis.maxSteps}/${analysis.triggerSteps} steps，拒絕下注 ${requestedBet}`
+        reason: `倍投法風險控管：${analysis.maxSteps}/${analysis.triggerSteps} steps，拒絕投入 ${requestedBet}`
       }
     });
   }
@@ -256,11 +256,11 @@ async function checkAntiMartingaleAllowed(discordUser, requestedBet) {
   const lines = [
     '⚠️ 倍投法風險控管啟動',
     '',
-    `系統偵測到你在最近 **${analysis.windowMinutes} 分鐘** 內多次使用「輸了就加倍下注」的下注模式。`,
+    `系統偵測到你在最近 **${analysis.windowMinutes} 分鐘** 內多次使用「輸了就加倍投入」的投入模式。`,
     `偵測次數：**${analysis.maxSteps}/${analysis.triggerSteps}**`,
-    `近期賭博淨收益：**${formatCoins(analysis.netProfit)}**`,
+    `近期休閒遊戲淨收益：**${formatCoins(analysis.netProfit)}**`,
     '',
-    `為了防止系統經濟被倍投法破壞，你目前只能下注 **${formatCoins(cfg.maxBetWhenFlagged)}** 或以下。`,
+    `為了防止系統經濟被倍投法破壞，你目前只能投入 **${formatCoins(cfg.maxBetWhenFlagged)}** 或以下。`,
     `此限制會在 **${cfg.blockCooldownMinutes} 分鐘** 後自動解除。`
   ];
 
@@ -304,8 +304,8 @@ async function checkGamblingBetAllowed(discordUser, requestedBet) {
     message: [
       '⚠️ 風險控管啟動',
       '',
-      `你最近的下注波動過高，系統暫時限制你的單次下注上限為 **${formatCoins(maxAllowedBet)}**。`,
-      '請降低下注金額後再試一次。'
+      `你最近的投入波動過高，系統暫時限制你的單次投入上限為 **${formatCoins(maxAllowedBet)}**。`,
+      '請降低投入金額後再試一次。'
     ].join('\n')
   };
 }
@@ -355,7 +355,7 @@ async function sendPostGameRiskAlert(client, discordUser, gameLabel, extraLines 
         `遊戲局數：**${stats.games}**`,
         `勝利次數：**${stats.wins}**`,
         `勝率：**${formatPercent(stats.winRate)}**`,
-        `總下注：**${formatCoins(stats.totalBet)}**`,
+        `總投入：**${formatCoins(stats.totalBet)}**`,
         `淨收益：**${formatCoins(stats.netProfit)}**`,
         ...extraLines
       ],
@@ -376,8 +376,8 @@ async function sendPostGameRiskAlert(client, discordUser, gameLabel, extraLines 
         `倍投法偵測：${gameLabel}`,
         [
           `偵測次數：**${analysis.maxSteps}/${analysis.triggerSteps}**`,
-          `最近 **${analysis.windowMinutes} 分鐘** 賭博淨收益：**${formatCoins(analysis.netProfit)}**`,
-          `後續高風險下注會被限制至 **${formatCoins(riskConfig.antiMartingale.maxBetWhenFlagged)}** 或以下。`,
+          `最近 **${analysis.windowMinutes} 分鐘** 休閒遊戲淨收益：**${formatCoins(analysis.netProfit)}**`,
+          `後續高風險投入會被限制至 **${formatCoins(riskConfig.antiMartingale.maxBetWhenFlagged)}** 或以下。`,
           ...extraLines
         ],
         'ANTI_MARTINGALE'

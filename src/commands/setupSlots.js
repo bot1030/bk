@@ -4,12 +4,12 @@ const { sendSetupPanel } = require('../systems/gamePanelSystem');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup_slots')
-    .setDescription('管理員專用：在指定頻道建立老虎機面板')
+    .setDescription('管理員專用：在指定頻道建立幸運轉盤面板')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addChannelOption(option =>
       option
         .setName('channel')
-        .setDescription('要建立老虎機面板的頻道')
+        .setDescription('要建立幸運轉盤面板的頻道')
         .setRequired(true)
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
     ),

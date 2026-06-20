@@ -16,11 +16,11 @@ function privatePayload(payload = {}) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('slots')
-    .setDescription('遊玩老虎機並嘗試贏得大獎')
+    .setDescription('遊玩幸運轉盤並嘗試贏得大獎')
     .addIntegerOption(option =>
       option
         .setName('bet')
-        .setDescription('下注金額：500–50,000 金幣')
+        .setDescription('投入金額：500–50,000 金幣')
         .setRequired(true)
         .setMinValue(gamblingConfig.slots.minBet)
         .setMaxValue(gamblingConfig.slots.maxBet)
@@ -39,7 +39,7 @@ module.exports = {
       return interaction.reply(privatePayload({ content: risk.message }));
     }
 
-    const spent = await spendCoins(interaction.user, bet, 'SLOTS', '老虎機下注');
+    const spent = await spendCoins(interaction.user, bet, 'SLOTS', '幸運轉盤投入');
     if (!spent.ok) {
       return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
     }
@@ -53,11 +53,11 @@ module.exports = {
     const payout = calculatePayout(bet, result.multiplier);
 
     if (payout > 0) {
-      await addCoins(interaction.user, payout, 'SLOTS', `老虎機結果：${result.label}`);
+      await addCoins(interaction.user, payout, 'SLOTS', `幸運轉盤結果：${result.label}`);
     }
 
-    await sendPostGameRiskAlert(interaction.client, interaction.user, '老虎機', [
-      `本局下注：**${formatCoins(bet)}**`,
+    await sendPostGameRiskAlert(interaction.client, interaction.user, '幸運轉盤', [
+      `本局投入：**${formatCoins(bet)}**`,
       `本局獎項：**${result.label}**`,
       `本局獲得：**${formatCoins(payout)}**`
     ]);
@@ -65,10 +65,10 @@ module.exports = {
     if (payout > 0) {
       await announceBigWin(interaction.client, interaction.guildId, {
         user: interaction.user,
-        gameName: '老虎機',
+        gameName: '幸運轉盤',
         coins: payout,
         detailLines: [
-          `下注金額：**${formatCoins(bet)}**`,
+          `投入金額：**${formatCoins(bet)}**`,
           `結果：**${visual.join(' | ')}**`,
           `獎項：**${result.label}**`,
           `倍率：**${result.multiplier}x**`
@@ -78,9 +78,9 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(payout > 0 ? 0x2ecc71 : 0xe74c3c)
-      .setTitle('🎰 老虎機')
+      .setTitle('🎰 幸運轉盤')
       .setDescription([
-        `下注金額：**${formatCoins(bet)}**`,
+        `投入金額：**${formatCoins(bet)}**`,
         '',
         `結果：**${visual.join(' | ')}**`,
         '',

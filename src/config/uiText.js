@@ -13,6 +13,6 @@ module.exports = {
     balance: '餘額',
     richLeaderboard: '全球富豪排行榜',
     fishingRewards: '釣魚獎勵表',
-    slotsRewards: '老虎機獎勵表'
+    slotsRewards: '幸運轉盤獎勵表'
   }
 };

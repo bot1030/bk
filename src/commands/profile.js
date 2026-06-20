@@ -117,7 +117,7 @@ module.exports = {
           name: '🎮 遊戲總覽',
           value: [
             `總遊玩次數：**${formatNumber(allGamesPlayed)}** 次`,
-            `賭場遊戲次數：**${formatNumber(casinoGamesPlayed)}** 次`,
+            `遊戲中心遊戲次數：**${formatNumber(casinoGamesPlayed)}** 次`,
             `釣魚次數：**${formatNumber(user.fishingCount)}** 次`
           ].join('\n'),
           inline: false
@@ -126,7 +126,7 @@ module.exports = {
           name: '🏆 各遊戲勝利 / 獲得次數',
           value: [
             `硬幣翻轉勝利：**${formatNumber(coinflipWins)}** 次`,
-            `老虎機勝利：**${formatNumber(slotsWins)}** 次`,
+            `幸運轉盤勝利：**${formatNumber(slotsWins)}** 次`,
             `踩地雷成功領取：**${formatNumber(minesWins)}** 次`,
             `釣魚獲得獎勵：**${formatNumber(fishingRewards)}** 次`
           ].join('\n'),

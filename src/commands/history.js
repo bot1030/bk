@@ -11,7 +11,7 @@ const ADMIN_USER_IDS = [
 
 const TYPE_LABELS = {
   COINFLIP: '硬幣翻轉',
-  SLOTS: '老虎機',
+  SLOTS: '幸運轉盤',
   MINES: '踩地雷',
   FISHING: '釣魚',
   DAILY: '每日獎勵',

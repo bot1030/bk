@@ -10,7 +10,9 @@ const ADMIN_USER_IDS = [
 ];
 
 const EXTRA_EXCLUDED_USER_IDS = [
-  '979514745109479444'
+  '979514745109479444',
+  '1411064622794018866',
+  '576599013671960576'
 ];
 
 const EXCLUDED_USER_IDS = [
@@ -23,19 +25,19 @@ const GAME_DEFINITIONS = [
     key: 'coinflip',
     title: '🪙 硬幣翻轉',
     types: ['COINFLIP'],
-    betLabel: '總下注金額'
+    betLabel: '總投入金額'
   },
   {
     key: 'slots',
-    title: '🎰 老虎機',
+    title: '🎰 幸運轉盤',
     types: ['SLOTS'],
-    betLabel: '總下注金額'
+    betLabel: '總投入金額'
   },
   {
     key: 'mines',
     title: '💣 踩地雷',
     types: ['MINES'],
-    betLabel: '總下注金額'
+    betLabel: '總投入金額'
   },
   {
     key: 'fishing',
@@ -78,7 +80,7 @@ function parseCoinflipTaxFromReason(reason) {
   return value;
 }
 
-function makeBaseStats(title, betLabel = '總下注金額') {
+function makeBaseStats(title, betLabel = '總投入金額') {
   return {
     title,
     betLabel,
@@ -240,6 +242,32 @@ function aggregateAdminGiveaways(transactions) {
   return { players: players.size, entries, coinValuePaid, coinsPaid, jkPaid };
 }
 
+
+function aggregateAdminDeletes(transactions) {
+  const players = new Set();
+  let entries = 0;
+  let coinValueRemoved = 0;
+  let coinsRemoved = 0;
+  let jkRemoved = 0;
+
+  for (const tx of transactions) {
+    if (tx.type !== 'ADMIN_DELETE') continue;
+    if (tx.amount >= 0) continue;
+
+    const userId = tx.user?.discordId;
+    if (userId) players.add(userId);
+
+    const removedCoinValue = Math.abs(toCoinValue(tx));
+    entries += 1;
+    coinValueRemoved += removedCoinValue;
+
+    if (tx.currency === 'COINS') coinsRemoved += Math.abs(tx.amount);
+    if (tx.currency === 'JK') jkRemoved += Math.abs(tx.amount);
+  }
+
+  return { players: players.size, entries, coinValueRemoved, coinsRemoved, jkRemoved };
+}
+
 function aggregateAntiMartingale(transactions) {
   const players = new Set();
   let blocks = 0;
@@ -297,6 +325,7 @@ async function getCasinoControlStats() {
   const convert = aggregateConvert(transactions);
   const rods = aggregateRodPurchases(transactions);
   const adminGiveaways = aggregateAdminGiveaways(transactions);
+  const adminDeletes = aggregateAdminDeletes(transactions);
   const antiMartingale = aggregateAntiMartingale(transactions);
 
   const coinflipTaxCollected = gameStats.reduce((sum, game) => sum + (game.taxCollected || 0), 0);
@@ -310,7 +339,9 @@ async function getCasinoControlStats() {
     startingBonusLoss,
     dailyLoss: daily.coinsPaid,
     adminGiveawayLoss: adminGiveaways.coinValuePaid,
-    totalLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid
+    adminDeleteRecovery: adminDeletes.coinValueRemoved,
+    totalGrossLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid,
+    totalLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid - adminDeletes.coinValueRemoved
   };
 
   const totalCasinoProfitBeforeOperatingLosses = gameCasinoProfit + rodCasinoProfit;
@@ -338,6 +369,7 @@ async function getCasinoControlStats() {
     convert,
     rods,
     adminGiveaways,
+    adminDeletes,
     antiMartingale
   };
 }
@@ -348,9 +380,9 @@ function buildGameFieldValue(game) {
     `局數 / 次數：**${formatNumber(game.rounds)}**`,
     `${game.betLabel}：**${formatCoins(game.totalBetOrCost)}**`,
     `玩家獲得總額：**${formatCoins(game.totalPaid)}**`,
-    `賭場淨利：**${formatCoins(game.casinoProfit)}**`,
+    `遊戲中心淨利：**${formatCoins(game.casinoProfit)}**`,
     `玩家淨結果：**${formatCoins(game.playerNet)}**`,
-    game.taxCollected > 0 ? `扣稅收入：**+${formatCoins(game.taxCollected)}**（已包含在賭場淨利）` : null,
+    game.taxCollected > 0 ? `扣稅收入：**+${formatCoins(game.taxCollected)}**（已包含在遊戲中心淨利）` : null,
     game.grossPayoutBeforeTax > 0 ? `稅前獎金總額：**${formatCoins(game.grossPayoutBeforeTax)}**` : null,
     `返還率：**${game.payoutRate}**`,
     `獲獎筆數比例：**${game.payoutEventRate}**`
