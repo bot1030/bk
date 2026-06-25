@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { spendCoins, spendJK, getBalance } = require('../systems/economySystem');
-const { formatCoins, formatJK } = require('../utils/format');
+const { spendCoins, spendEventCoins, spendJK, getBalance } = require('../systems/economySystem');
+const { formatCoins, formatEventCoins, formatCoinsWithEvent, formatJK } = require('../utils/format');
 
 const ALLOWED_USER_IDS = new Set([
   '473647287026057227',
@@ -11,7 +11,7 @@ const ALLOWED_USER_IDS = new Set([
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('delete')
-    .setDescription('管理員專用：刪除玩家的金幣或 JK餘額')
+    .setDescription('管理員專用：刪除玩家的金幣、活動金幣或 JK餘額')
     .addUserOption(option =>
       option
         .setName('user')
@@ -25,6 +25,7 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: '金幣', value: 'coins' },
+          { name: '活動金幣', value: 'event_coins' },
           { name: 'JK餘額', value: 'jk' }
         )
     )
@@ -62,6 +63,16 @@ module.exports = {
       result = await spendJK(target, amount, 'ADMIN_DELETE', `管理員 ${interaction.user.tag} 刪除 JK餘額`);
       formattedAmount = formatJK(amount);
       currencyLabel = 'JK餘額';
+    } else if (currency === 'event_coins') {
+      if ((current.eventCoins || 0) < amount) {
+        return interaction.reply({
+          content: `❌ 目標使用者的活動金幣不足。\n目前活動金幣：**${formatEventCoins(current.eventCoins || 0)}**\n嘗試刪除：**${formatEventCoins(amount)}**`
+        });
+      }
+
+      result = await spendEventCoins(target, amount, 'ADMIN_DELETE', `管理員 ${interaction.user.tag} 刪除活動金幣`);
+      formattedAmount = formatEventCoins(amount);
+      currencyLabel = '活動金幣';
     } else {
       if (current.coins < amount) {
         return interaction.reply({
@@ -89,7 +100,7 @@ module.exports = {
         `刪除貨幣：**${currencyLabel}**`,
         `刪除數量：**${formattedAmount}**`,
         '',
-        `目前金幣：**${formatCoins(updated.coins)}**`,
+        `目前金幣：**${formatCoinsWithEvent(updated.coins, updated.eventCoins)}**`,
         `目前 JK餘額：**${formatJK(updated.jkBalance)}**`
       ].join('\n'));
 

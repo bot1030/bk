@@ -3,7 +3,7 @@ const prisma = require('../database/prisma');
 const gamblingConfig = require('../config/gamblingConfig');
 const { validateBet } = require('../utils/guards');
 const { formatCoins } = require('../utils/format');
-const { spendCoins, addCoins } = require('../systems/economySystem');
+const { spendCoins, addCoins, addEventCoins } = require('../systems/economySystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
 const minesSystem = require('../systems/minesSystem');
@@ -45,6 +45,42 @@ async function safeFollowUp(interaction, payload = {}) {
   return interaction.followUp(privatePayload(payload)).catch(() => null);
 }
 
+function getStakeBreakdown(game) {
+  const eventStake = Number(game.eventCoinStake || 0);
+  let normalStake = Number(game.normalCoinStake || 0);
+
+  if (eventStake <= 0 && normalStake <= 0) {
+    normalStake = Number(game.bet || 0);
+  }
+
+  return {
+    normalStake,
+    eventStake,
+    totalStake: normalStake + eventStake
+  };
+}
+
+function formatStakeBreakdown(game) {
+  const { normalStake, eventStake, totalStake } = getStakeBreakdown(game);
+  if (eventStake <= 0) return formatCoins(totalStake);
+  if (normalStake <= 0) return `${formatCoins(totalStake)}（活動金幣 ${eventStake.toLocaleString('en-US')}）`;
+  return `${formatCoins(totalStake)}（活動金幣 ${eventStake.toLocaleString('en-US')} + 金幣 ${normalStake.toLocaleString('en-US')}）`;
+}
+
+async function refundGameStake(discordUser, game, reason) {
+  const { normalStake, eventStake, totalStake } = getStakeBreakdown(game);
+
+  if (normalStake > 0) {
+    await addCoins(discordUser, normalStake, 'MINES', `${reason}｜退回正式金幣`);
+  }
+
+  if (eventStake > 0) {
+    await addEventCoins(discordUser, eventStake, 'MINES', `${reason}｜退回活動金幣`);
+  }
+
+  return { normalStake, eventStake, totalStake };
+}
+
 function buildMinesEmbed(game, title = '💣 踩地雷', revealAll = false) {
   const revealed = parseJsonArray(game.revealed);
   const safePicks = revealed.length;
@@ -58,7 +94,7 @@ function buildMinesEmbed(game, title = '💣 踩地雷', revealAll = false) {
     .setColor(revealAll ? 0x95a5a6 : 0xf39c12)
     .setTitle(title)
     .setDescription([
-      `投入金額：**${formatCoins(game.bet)}**`,
+      `投入金額：**${formatStakeBreakdown(game)}**`,
       `地雷數量：**${game.mines}**`,
       `安全點擊：**${safePicks}**`,
       `目前倍率：**${multiplier}x**`,
@@ -106,6 +142,8 @@ async function startMinesGame(interaction, bet, mineCount) {
     data: {
       userId: user.id,
       bet,
+      normalCoinStake: spent.spentCoins || 0,
+      eventCoinStake: spent.spentEventCoins || 0,
       mines: mineCount,
       board: createBoard(mineCount),
       revealed: [],
@@ -173,7 +211,7 @@ async function cashOutGame(interaction, game) {
   await addCoins(interaction.user, payout, 'MINES', '踩地雷提現');
 
   await sendPostGameRiskAlert(interaction.client, interaction.user, '踩地雷', [
-    `本局投入：**${formatCoins(game.bet)}**`,
+    `本局投入：**${formatStakeBreakdown(game)}**`,
     `地雷數量：**${game.mines}**`,
     `安全點擊：**${revealed.length}**`,
     `本局獲得：**${formatCoins(payout)}**`
@@ -184,7 +222,7 @@ async function cashOutGame(interaction, game) {
     gameName: '踩地雷',
     coins: payout,
     detailLines: [
-      `投入金額：**${formatCoins(game.bet)}**`,
+      `投入金額：**${formatStakeBreakdown(game)}**`,
       `地雷數量：**${game.mines}**`,
       `安全點擊：**${revealed.length}**`,
       '狀態：**提現成功**'
@@ -215,7 +253,7 @@ async function cashOutGame(interaction, game) {
 }
 
 async function quitGame(interaction, game) {
-  await addCoins(interaction.user, game.bet, 'MINES', '踩地雷退出退回本金');
+  const refund = await refundGameStake(interaction.user, game, '踩地雷退出退回本金');
 
   const updatedGame = await prisma.minesGame.update({
     where: { id: game.id },
@@ -227,7 +265,7 @@ async function quitGame(interaction, game) {
     .setColor(0x95a5a6)
     .setTitle('🚪 已退出踩地雷')
     .setDescription([
-      `已退回本金：**${formatCoins(game.bet)}**`,
+      `已退回本金：**${formatStakeBreakdown(game)}**`,
       '本局沒有獲得任何額外獎勵。'
     ].join('\n'));
 
@@ -257,7 +295,13 @@ async function refundAllActiveGames(interaction) {
     });
   }
 
-  const totalRefund = activeGames.reduce((sum, game) => sum + Number(game.bet || 0), 0);
+  const refundTotals = activeGames.reduce((acc, game) => {
+    const stake = getStakeBreakdown(game);
+    acc.normal += stake.normalStake;
+    acc.event += stake.eventStake;
+    acc.total += stake.totalStake;
+    return acc;
+  }, { normal: 0, event: 0, total: 0 });
   const ids = activeGames.map(game => game.id);
 
   await prisma.minesGame.updateMany({
@@ -265,8 +309,12 @@ async function refundAllActiveGames(interaction) {
     data: { status: 'FORCE_REFUNDED', payout: 0 }
   });
 
-  if (totalRefund > 0) {
-    await addCoins(interaction.user, totalRefund, 'MINES', '強制結束所有踩地雷遊戲退回本金');
+  if (refundTotals.normal > 0) {
+    await addCoins(interaction.user, refundTotals.normal, 'MINES', '強制結束所有踩地雷遊戲退回本金｜退回正式金幣');
+  }
+
+  if (refundTotals.event > 0) {
+    await addEventCoins(interaction.user, refundTotals.event, 'MINES', '強制結束所有踩地雷遊戲退回本金｜退回活動金幣');
   }
 
   const embed = new EmbedBuilder()
@@ -274,7 +322,8 @@ async function refundAllActiveGames(interaction) {
     .setTitle('🧯 已結束所有踩地雷遊戲')
     .setDescription([
       `已結束遊戲數量：**${activeGames.length}**`,
-      `退回本金總額：**${formatCoins(totalRefund)}**`,
+      `退回本金總額：**${formatCoins(refundTotals.total)}**`,
+      `退回活動金幣：**${refundTotals.event.toLocaleString('en-US')} 活動金幣**`,
       '',
       '本操作只退回本金，不會給予任何額外獎勵。',
       '舊的踩地雷按鈕會自動失效。'
@@ -364,7 +413,7 @@ module.exports = {
       await addCoins(interaction.user, payout, 'MINES', '踩地雷全清勝利');
 
       await sendPostGameRiskAlert(interaction.client, interaction.user, '踩地雷', [
-        `本局投入：**${formatCoins(game.bet)}**`,
+        `本局投入：**${formatStakeBreakdown(game)}**`,
         `本局地雷：**${game.mines}**`,
         `本局獲得：**${formatCoins(payout)}**`
       ]);
@@ -374,7 +423,7 @@ module.exports = {
         gameName: '踩地雷',
         coins: payout,
         detailLines: [
-          `投入金額：**${formatCoins(game.bet)}**`,
+          `投入金額：**${formatStakeBreakdown(game)}**`,
           `地雷數量：**${game.mines}**`,
           '狀態：**全部安全格已清除**'
         ]

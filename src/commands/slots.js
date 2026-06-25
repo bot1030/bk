@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const gamblingConfig = require('../config/gamblingConfig');
 const { validateBet } = require('../utils/guards');
 const { formatCoins } = require('../utils/format');
@@ -8,15 +8,19 @@ const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/r
 const { announceBigWin } = require('../systems/bigWinSystem');
 const prisma = require('../database/prisma');
 
-function privatePayload(payload = {}) {
-  return { ...payload, flags: MessageFlags.Ephemeral };
+function formatSpendBreakdown(spent, fallbackAmount) {
+  const normal = Number(spent?.spentCoins || 0);
+  const event = Number(spent?.spentEventCoins || 0);
+  const total = Number(spent?.totalSpent || fallbackAmount || 0);
+  if (event <= 0) return formatCoins(total);
+  if (normal <= 0) return `${formatCoins(total)}（活動金幣 ${event.toLocaleString('en-US')}）`;
+  return `${formatCoins(total)}（活動金幣 ${event.toLocaleString('en-US')} + 金幣 ${normal.toLocaleString('en-US')}）`;
 }
-
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('slots')
-    .setDescription('遊玩幸運轉盤並嘗試贏得大獎')
+    .setDescription('遊玩幸運轉盤並嘗試獲得獎勵')
     .addIntegerOption(option =>
       option
         .setName('bet')
@@ -31,18 +35,20 @@ module.exports = {
     const check = validateBet(bet, gamblingConfig.slots.minBet, gamblingConfig.slots.maxBet);
 
     if (!check.ok) {
-      return interaction.reply(privatePayload({ content: `❌ ${check.message}` }));
+      return interaction.reply({ content: `❌ ${check.message}` });
     }
 
     const risk = await checkGamblingBetAllowed(interaction.user, bet);
     if (!risk.ok) {
-      return interaction.reply(privatePayload({ content: risk.message }));
+      return interaction.reply({ content: risk.message });
     }
 
     const spent = await spendCoins(interaction.user, bet, 'SLOTS', '幸運轉盤投入');
     if (!spent.ok) {
-      return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
+      return interaction.reply({ content: '❌ 你的金幣不足。' });
     }
+
+    const spentLabel = formatSpendBreakdown(spent, bet);
 
     await prisma.user.update({
       where: { discordId: interaction.user.id },
@@ -57,7 +63,7 @@ module.exports = {
     }
 
     await sendPostGameRiskAlert(interaction.client, interaction.user, '幸運轉盤', [
-      `本局投入：**${formatCoins(bet)}**`,
+      `本局投入：**${spentLabel}**`,
       `本局獎項：**${result.label}**`,
       `本局獲得：**${formatCoins(payout)}**`
     ]);
@@ -68,7 +74,7 @@ module.exports = {
         gameName: '幸運轉盤',
         coins: payout,
         detailLines: [
-          `投入金額：**${formatCoins(bet)}**`,
+          `投入金額：**${spentLabel}**`,
           `結果：**${visual.join(' | ')}**`,
           `獎項：**${result.label}**`,
           `倍率：**${result.multiplier}x**`
@@ -80,7 +86,7 @@ module.exports = {
       .setColor(payout > 0 ? 0x2ecc71 : 0xe74c3c)
       .setTitle('🎰 幸運轉盤')
       .setDescription([
-        `投入金額：**${formatCoins(bet)}**`,
+        `投入金額：**${spentLabel}**`,
         '',
         `結果：**${visual.join(' | ')}**`,
         '',
@@ -89,6 +95,6 @@ module.exports = {
         `獲得：**${formatCoins(payout)}**`
       ].join('\n'));
 
-    return interaction.reply(privatePayload({ embeds: [embed] }));
+    return interaction.reply({ embeds: [embed] });
   }
 };

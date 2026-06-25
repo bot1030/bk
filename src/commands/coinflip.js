@@ -31,10 +31,20 @@ function formatTaxRate(rate) {
   return `${Math.round(rate * 100)}%`;
 }
 
+
+function formatSpendBreakdown(spent, fallbackAmount) {
+  const normal = Number(spent?.spentCoins || 0);
+  const event = Number(spent?.spentEventCoins || 0);
+  const total = Number(spent?.totalSpent || fallbackAmount || 0);
+  if (event <= 0) return formatCoins(total);
+  if (normal <= 0) return `${formatCoins(total)}（活動金幣 ${event.toLocaleString('en-US')}）`;
+  return `${formatCoins(total)}（活動金幣 ${event.toLocaleString('en-US')} + 金幣 ${normal.toLocaleString('en-US')}）`;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('coinflip')
-    .setDescription('投投入碼並選擇硬幣正面或反面')
+    .setDescription('投入金幣並選擇硬幣正面或反面')
     .addIntegerOption(option =>
       option
         .setName('bet')
@@ -73,6 +83,8 @@ module.exports = {
       return interaction.reply(privatePayload({ content: '❌ 你的金幣不足。' }));
     }
 
+    const spentLabel = formatSpendBreakdown(spent, bet);
+
     await prisma.user.update({
       where: { discordId: interaction.user.id },
       data: { coinflipPlayed: { increment: 1 } }
@@ -95,7 +107,7 @@ module.exports = {
     }
 
     await sendPostGameRiskAlert(interaction.client, interaction.user, '硬幣翻轉', [
-      `本局投入：**${formatCoins(bet)}**`,
+      `本局投入：**${spentLabel}**`,
       `本局結果：**${result.won ? '勝利' : '失敗'}**`,
       result.won ? `稅前獎金：**${formatCoins(grossPayout)}**` : `本局獲得：**${formatCoins(0)}**`,
       result.won ? `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）` : null,
@@ -109,7 +121,7 @@ module.exports = {
         gameName: '硬幣翻轉',
         coins: payout,
         detailLines: [
-          `投入金額：**${formatCoins(bet)}**`,
+          `投入金額：**${spentLabel}**`,
           `玩家選擇：**${result.choiceLabel}**`,
           `硬幣結果：**${result.resultLabel}**`,
           `稅前獎金：**${formatCoins(grossPayout)}**`,
@@ -124,7 +136,7 @@ module.exports = {
       .setColor(result.won ? 0x2ecc71 : 0xe74c3c)
       .setTitle('🪙 硬幣翻轉')
       .setDescription([
-        `投入金額：**${formatCoins(bet)}**`,
+        `投入金額：**${spentLabel}**`,
         `你的選擇：**${result.choiceLabel}**`,
         `硬幣結果：**${result.resultLabel}**`,
         benefits.luckPercent > 0 ? `角色加成：**${formatBenefitLine(benefits)}**` : null,
@@ -136,7 +148,7 @@ module.exports = {
               `扣稅：**${formatCoins(taxAmount)}**（${formatTaxRate(taxRate)}）`,
               `實收獎金：**${formatCoins(payout)}**。`
             ].join('\n')
-          : `你失去了 **${formatCoins(bet)}**。`
+          : `你失去了 **${spentLabel}**。`
       ].filter(line => line !== null).join('\n'));
 
     return interaction.reply(privatePayload({ embeds: [embed] }));

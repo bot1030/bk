@@ -23,7 +23,7 @@ const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('./riskSystem
 const { announceBigWin } = require('./bigWinSystem');
 const { validateBet } = require('../utils/guards');
 const { getRemainingCooldown } = require('../utils/cooldown');
-const { formatCoins, formatJK, formatDuration } = require('../utils/format');
+const { formatCoins, formatCoinsWithEvent, formatJK, formatDuration } = require('../utils/format');
 const { createConvertSessionUi } = require('../commands/convert');
 const { checkDailyFarmingWarning } = require('./dailyFarmingMonitorSystem');
 const { rollDailyBaseReward, getDailyRewardChanceText } = require('./dailyRewardSystem');
@@ -167,7 +167,7 @@ function buildDailyPanel() {
       '',
       '🎮 **玩法**',
       '點擊下方按鈕即可領取每日獎勵。',
-      '領取結果只會顯示給你自己。'
+      '領取結果會顯示你目前的金幣與活動金幣。'
     ].join('\n'));
 
   const components = [
@@ -197,6 +197,8 @@ function buildConvertPanel() {
       '💱 **兌換比例**',
       '**1,000 金幣 = 1 JK餘額**',
       '**1 JK餘額 = 1,000 金幣**',
+      '',
+      '活動金幣不能兌換成 JK餘額，遊戲時會優先使用。',
       '',
       '⚠️ 金幣換成 JK餘額時，金幣數量必須是 **1,000** 的倍數。',
       '金幣換成 JK餘額後會先進入 **待結算 JK餘額** 24 小時。',
@@ -443,7 +445,7 @@ async function claimDailyFromPanel(interaction) {
       `基礎獎勵：**${formatCoins(baseReward)}**`,
       `角色加成：**+${benefits.dailyBoostPercent}%**`,
       `本次獲得：**${formatCoins(reward)}**`,
-      `目前金幣：**${formatCoins(updatedUser.coins)}**`,
+      `目前金幣：**${formatCoinsWithEvent(updatedUser.coins, updatedUser.eventCoins)}**`,
       '',
       `目前加成：${formatBenefitLine(benefits)}`,
       '明天再回來領取獎勵。'

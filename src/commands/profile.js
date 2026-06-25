@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const prisma = require('../database/prisma');
 const { getOrCreateUser } = require('../systems/economySystem');
 const { rods } = require('../config/rodConfig');
-const { formatCoins, formatJK, formatNumber } = require('../utils/format');
+const { formatCoins, formatCoinsWithEvent, formatJK, formatNumber } = require('../utils/format');
 const { getPendingJkSummaryByUserId } = require('../systems/pendingJkSystem');
 const { getMemberRoleBenefits, formatBenefitLine } = require('../systems/roleBenefitSystem');
 
@@ -78,6 +78,7 @@ module.exports = {
     });
 
     const selectedRod = rods[user.selectedRod] || rods.basic;
+    const playableCoins = Number(user.coins || 0) + Number(user.eventCoins || 0);
     const totalWealth = user.coins + user.jkBalance * JK_TO_COINS_RATE + pending.pendingCoins;
 
     const coinflipWins = countGameWins(transactions, 'COINFLIP');
@@ -85,8 +86,8 @@ module.exports = {
     const minesWins = countGameWins(transactions, 'MINES');
     const fishingRewards = countGameWins(transactions, 'FISHING');
 
-    const casinoGamesPlayed = user.coinflipPlayed + user.slotsPlayed + user.minesPlayed;
-    const allGamesPlayed = casinoGamesPlayed + user.fishingCount;
+    const leisureGamesPlayed = user.coinflipPlayed + user.slotsPlayed + user.minesPlayed;
+    const allGamesPlayed = leisureGamesPlayed + user.fishingCount;
 
     const totalGameWonCoins = sumPositiveGameAmount(transactions, 'COINS');
     const totalGameWonJk = sumPositiveGameAmount(transactions, 'JK');
@@ -95,21 +96,16 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
       .setTitle('👤 玩家公開資料')
-      .setDescription([
-        `玩家：<@${target.id}>`,
-        '',
-        '此頁只顯示公開資料、勝利次數與遊戲獲得金額。',
-        '不顯示失敗扣款、不顯示虧損、不顯示勝率。'
-      ].join('\n'))
+      .setDescription(`玩家：<@${target.id}>`)
       .addFields(
         {
           name: '💰 目前總資產',
           value: [
-            `金幣：**${formatCoins(user.coins)}**`,
+            `金幣：**${formatCoinsWithEvent(user.coins, user.eventCoins)}**`,
+            `可用遊戲金幣：**${formatCoins(playableCoins)}**`,
             `正式 JK餘額：**${formatJK(user.jkBalance)}**`,
             `待結算 JK餘額：約 **${formatJK(Math.floor(pending.pendingCoins / JK_TO_COINS_RATE))}**`,
-            `總資產估值：**${formatCoins(totalWealth)}**`,
-            `換算比例：**1 JK餘額 = ${formatCoins(JK_TO_COINS_RATE)}**`
+            `總資產估值：**${formatCoins(totalWealth)}**`
           ].join('\n'),
           inline: false
         },
@@ -117,16 +113,16 @@ module.exports = {
           name: '🎮 遊戲總覽',
           value: [
             `總遊玩次數：**${formatNumber(allGamesPlayed)}** 次`,
-            `遊戲中心遊戲次數：**${formatNumber(casinoGamesPlayed)}** 次`,
+            `休閒遊戲次數：**${formatNumber(leisureGamesPlayed)}** 次`,
             `釣魚次數：**${formatNumber(user.fishingCount)}** 次`
           ].join('\n'),
           inline: false
         },
         {
-          name: '🏆 各遊戲勝利 / 獲得次數',
+          name: '🏆 各遊戲獲得次數',
           value: [
-            `硬幣翻轉勝利：**${formatNumber(coinflipWins)}** 次`,
-            `幸運轉盤勝利：**${formatNumber(slotsWins)}** 次`,
+            `硬幣翻轉：**${formatNumber(coinflipWins)}** 次`,
+            `幸運轉盤：**${formatNumber(slotsWins)}** 次`,
             `踩地雷成功領取：**${formatNumber(minesWins)}** 次`,
             `釣魚獲得獎勵：**${formatNumber(fishingRewards)}** 次`
           ].join('\n'),
@@ -154,10 +150,7 @@ module.exports = {
         },
         {
           name: '🎣 釣魚資料',
-          value: [
-            `目前釣竿：**${selectedRod.label || selectedRod.name || user.selectedRod}**`,
-            '隱藏鑽石不受幸運值加成影響。'
-          ].join('\n'),
+          value: `目前釣竿：**${selectedRod.label || selectedRod.name || user.selectedRod}**`,
           inline: false
         }
       )

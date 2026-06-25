@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { sendDoneRatingPanel } = require('../systems/commentSystem');
 
 const ADMIN_USER_IDS = [
@@ -7,25 +7,32 @@ const ADMIN_USER_IDS = [
   '1319968425698922591'
 ];
 
+const DONE_EXTRA_USER_IDS = [
+  '1384104547554824213'
+];
+
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 
-function isAdmin(userId) {
-  return ADMIN_USER_IDS.includes(userId);
+function canUseDone(userId) {
+  return ADMIN_USER_IDS.includes(userId) || DONE_EXTRA_USER_IDS.includes(userId);
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('done')
-    .setDescription('管理員專用：建立訂單完成評價按鈕')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('建立訂單完成評價按鈕'),
 
   async execute(interaction) {
-    if (!isAdmin(interaction.user.id)) {
+    if (!canUseDone(interaction.user.id)) {
       return interaction.reply(privatePayload({ content: '你不能這麼做 作弊鬼' }));
     }
 
     return sendDoneRatingPanel(interaction);
-  }
+  },
+
+  canUseDone,
+  ADMIN_USER_IDS,
+  DONE_EXTRA_USER_IDS
 };

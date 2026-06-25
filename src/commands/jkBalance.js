@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getBalance } = require('../systems/economySystem');
 const { getPendingJkSummaryByUserId } = require('../systems/pendingJkSystem');
-const { formatJK } = require('../utils/format');
+const { formatCoinsWithEvent, formatJK } = require('../utils/format');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -24,11 +24,9 @@ module.exports = {
       .setTitle('💎 JK餘額')
       .setDescription([
         `玩家：<@${target.id}>`,
+        `金幣：**${formatCoinsWithEvent(user.coins, user.eventCoins)}**`,
         `正式 JK餘額：**${formatJK(user.jkBalance)}**`,
-        `待結算 JK餘額：約 **${formatJK(Math.floor(pending.pendingCoins / 1000))}**`,
-        '',
-        '待結算 JK餘額仍可被 **幻影怪盜** 偷竊。',
-        '24 小時後會自動轉為正式 JK餘額。'
+        `待結算 JK餘額：約 **${formatJK(Math.floor(pending.pendingCoins / 1000))}**`
       ].join('\n'));
 
     await interaction.reply({ embeds: [embed] });

@@ -6,6 +6,17 @@ function formatCoins(value) {
   return `${formatNumber(value)} 金幣`;
 }
 
+function formatEventCoins(value) {
+  return `${formatNumber(value)} 活動金幣`;
+}
+
+function formatCoinsWithEvent(coins, eventCoins = 0) {
+  const normal = formatNumber(coins);
+  const event = Number(eventCoins || 0);
+  if (event <= 0) return `${normal} 金幣`;
+  return `${normal} 金幣 (+${formatNumber(event)} 活動金幣)`;
+}
+
 function formatJK(value) {
   return `${formatNumber(value)} JK餘額`;
 }
@@ -24,6 +35,8 @@ function formatDuration(ms) {
 module.exports = {
   formatNumber,
   formatCoins,
+  formatEventCoins,
+  formatCoinsWithEvent,
   formatJK,
   formatDuration
 };

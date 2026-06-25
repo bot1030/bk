@@ -3,7 +3,7 @@ const prisma = require('../database/prisma');
 const { getOrCreateUser, addCoins } = require('../systems/economySystem');
 const { DAILY_COOLDOWN_MS } = require('../config/economyConfig');
 const { getRemainingCooldown } = require('../utils/cooldown');
-const { formatCoins, formatDuration } = require('../utils/format');
+const { formatCoins, formatCoinsWithEvent, formatDuration } = require('../utils/format');
 const { getMemberRoleBenefits, applyDailyBoost, formatBenefitLine } = require('../systems/roleBenefitSystem');
 const { checkDailyFarmingWarning } = require('../systems/dailyFarmingMonitorSystem');
 const { rollDailyBaseReward } = require('../systems/dailyRewardSystem');
@@ -44,7 +44,7 @@ module.exports = {
         `基礎獎勵：**${formatCoins(baseReward)}**`,
         `角色加成：**+${benefits.dailyBoostPercent}%**`,
         `本次獲得：**${formatCoins(reward)}**`,
-        `目前金幣：**${formatCoins(updatedUser.coins)}**`,
+        `目前金幣：**${formatCoinsWithEvent(updatedUser.coins, updatedUser.eventCoins)}**`,
         '',
         `目前加成：${formatBenefitLine(benefits)}`,
         '明天再回來領取獎勵。'

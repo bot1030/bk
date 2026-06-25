@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { addCoins, addJK } = require('../systems/economySystem');
-const { formatCoins, formatJK } = require('../utils/format');
+const { addCoins, addEventCoins, addJK } = require('../systems/economySystem');
+const { formatCoins, formatEventCoins, formatCoinsWithEvent, formatJK } = require('../utils/format');
 
 const ALLOWED_USER_IDS = new Set([
   '473647287026057227',
@@ -11,7 +11,7 @@ const ALLOWED_USER_IDS = new Set([
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('add')
-    .setDescription('管理員專用：新增金幣或 JK餘額')
+    .setDescription('管理員專用：新增金幣、活動金幣或 JK餘額')
     .addUserOption(option =>
       option
         .setName('user')
@@ -25,6 +25,7 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: '金幣', value: 'coins' },
+          { name: '活動金幣', value: 'event_coins' },
           { name: 'JK餘額', value: 'jk' }
         )
     )
@@ -54,6 +55,10 @@ module.exports = {
       updated = await addJK(target, amount, 'ADMIN_ADD', `管理員 ${interaction.user.tag} 新增 JK餘額`);
       formattedAmount = formatJK(amount);
       currencyLabel = 'JK餘額';
+    } else if (currency === 'event_coins') {
+      updated = await addEventCoins(target, amount, 'ADMIN_ADD', `管理員 ${interaction.user.tag} 新增活動金幣`);
+      formattedAmount = formatEventCoins(amount);
+      currencyLabel = '活動金幣';
     } else {
       updated = await addCoins(target, amount, 'ADMIN_ADD', `管理員 ${interaction.user.tag} 新增金幣`);
       formattedAmount = formatCoins(amount);
@@ -69,7 +74,7 @@ module.exports = {
         `新增貨幣：**${currencyLabel}**`,
         `新增數量：**${formattedAmount}**`,
         '',
-        `目前金幣：**${formatCoins(updated.coins)}**`,
+        `目前金幣：**${formatCoinsWithEvent(updated.coins, updated.eventCoins)}**`,
         `目前 JK餘額：**${formatJK(updated.jkBalance)}**`
       ].join('\n'));
 

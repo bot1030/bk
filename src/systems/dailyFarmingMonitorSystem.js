@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const prisma = require('../database/prisma');
-const { formatCoins, formatNumber } = require('../utils/format');
+const { formatCoins, formatCoinsWithEvent, formatNumber } = require('../utils/format');
 const { ROLE_SHOP } = require('../config/roleShopConfig');
 
 const ADMIN_USER_IDS = [
@@ -30,7 +30,7 @@ function buildReasonLines({ gameTransactionCount, coinReductionCount }) {
   }
 
   if (coinReductionCount === 0) {
-    reasons.push('最近 30 天沒有任何金幣扣除紀錄');
+    reasons.push('最近 30 天沒有任何金幣或活動金幣扣除紀錄');
   }
 
   return reasons;
@@ -95,7 +95,7 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
     prisma.transaction.count({
       where: {
         userId: user.id,
-        currency: 'COINS',
+        currency: { in: ['COINS', 'EVENT_COINS'] },
         amount: { lt: 0 },
         createdAt: { gte: since }
       }
@@ -124,7 +124,7 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
       `最近 **${LOOKBACK_DAYS} 天**每日領取次數：**${formatNumber(dailyClaimCount)}**`,
       `遊戲交易次數：**${formatNumber(gameTransactionCount)}**`,
       `金幣扣除次數：**${formatNumber(coinReductionCount)}**`,
-      `目前金幣：**${formatCoins(user.coins)}**`,
+      `目前金幣：**${formatCoinsWithEvent(user.coins, user.eventCoins)}**`,
       '',
       '觸發原因：',
       ...reasonLines.map(reason => `• ${reason}`),

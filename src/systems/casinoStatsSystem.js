@@ -12,7 +12,8 @@ const ADMIN_USER_IDS = [
 const EXTRA_EXCLUDED_USER_IDS = [
   '979514745109479444',
   '1411064622794018866',
-  '576599013671960576'
+  '576599013671960576',
+  '1114820292099969053'
 ];
 
 const EXCLUDED_USER_IDS = [
@@ -55,6 +56,10 @@ function formatCoins(value) {
   return `${formatNumber(Math.round(value || 0))} 金幣`;
 }
 
+function formatEventCoins(value) {
+  return `${formatNumber(Math.round(value || 0))} 活動金幣`;
+}
+
 function formatJK(value) {
   return `${formatNumber(value || 0)} JK餘額`;
 }
@@ -80,14 +85,23 @@ function parseCoinflipTaxFromReason(reason) {
   return value;
 }
 
+function parseSpendKey(tx) {
+  const text = String(tx.reason || '');
+  const match = text.match(/局號\s*([A-Za-z0-9_-]+)/);
+  if (match) return `${tx.type}:${match[1]}`;
+  return `${tx.type}:${tx.id}`;
+}
+
 function makeBaseStats(title, betLabel = '總投入金額') {
   return {
     title,
     betLabel,
     players: new Set(),
-    rounds: 0,
+    roundKeys: new Set(),
     payoutEvents: 0,
     totalNegativeCoinValue: 0,
+    totalNormalCoinSpent: 0,
+    totalEventCoinSpent: 0,
     totalPositiveCoinValue: 0,
     jkPositive: 0,
     jkNegative: 0,
@@ -99,20 +113,22 @@ function makeBaseStats(title, betLabel = '總投入金額') {
 function finalizeGameStats(stats) {
   const totalBetOrCost = stats.totalNegativeCoinValue;
   const totalPaid = stats.totalPositiveCoinValue;
-  const casinoProfit = totalBetOrCost - totalPaid;
+  const gameCenterProfit = totalBetOrCost - totalPaid;
 
   return {
     title: stats.title,
     betLabel: stats.betLabel,
     playerCount: stats.players.size,
-    rounds: stats.rounds,
+    rounds: stats.roundKeys.size,
     payoutEvents: stats.payoutEvents,
     totalBetOrCost,
+    totalNormalCoinSpent: stats.totalNormalCoinSpent,
+    totalEventCoinSpent: stats.totalEventCoinSpent,
     totalPaid,
-    casinoProfit,
+    gameCenterProfit,
     playerNet: totalPaid - totalBetOrCost,
     payoutRate: safePercent(totalPaid, totalBetOrCost),
-    payoutEventRate: safePercent(stats.payoutEvents, stats.rounds),
+    payoutEventRate: safePercent(stats.payoutEvents, stats.roundKeys.size),
     jkPositive: stats.jkPositive,
     jkNegative: stats.jkNegative,
     taxCollected: stats.taxCollected,
@@ -136,8 +152,11 @@ function aggregateGameStats(transactions, definition) {
     }
 
     if (coinValue < 0) {
-      stats.rounds += 1;
+      stats.roundKeys.add(parseSpendKey(tx));
       stats.totalNegativeCoinValue += Math.abs(coinValue);
+
+      if (tx.currency === 'EVENT_COINS') stats.totalEventCoinSpent += Math.abs(tx.amount);
+      if (tx.currency === 'COINS') stats.totalNormalCoinSpent += Math.abs(tx.amount);
     } else if (coinValue > 0) {
       stats.payoutEvents += 1;
       stats.totalPositiveCoinValue += coinValue;
@@ -224,6 +243,7 @@ function aggregateAdminGiveaways(transactions) {
   let coinValuePaid = 0;
   let coinsPaid = 0;
   let jkPaid = 0;
+  let eventCoinsPaid = 0;
 
   for (const tx of transactions) {
     if (tx.type !== 'ADMIN_ADD') continue;
@@ -233,15 +253,24 @@ function aggregateAdminGiveaways(transactions) {
     if (userId) players.add(userId);
 
     entries += 1;
-    coinValuePaid += toCoinValue(tx);
 
-    if (tx.currency === 'COINS') coinsPaid += tx.amount;
-    if (tx.currency === 'JK') jkPaid += tx.amount;
+    if (tx.currency === 'COINS') {
+      coinsPaid += tx.amount;
+      coinValuePaid += tx.amount;
+    }
+
+    if (tx.currency === 'JK') {
+      jkPaid += tx.amount;
+      coinValuePaid += tx.amount * JK_TO_COINS_RATE;
+    }
+
+    if (tx.currency === 'EVENT_COINS') {
+      eventCoinsPaid += tx.amount;
+    }
   }
 
-  return { players: players.size, entries, coinValuePaid, coinsPaid, jkPaid };
+  return { players: players.size, entries, coinValuePaid, coinsPaid, jkPaid, eventCoinsPaid };
 }
-
 
 function aggregateAdminDeletes(transactions) {
   const players = new Set();
@@ -249,6 +278,7 @@ function aggregateAdminDeletes(transactions) {
   let coinValueRemoved = 0;
   let coinsRemoved = 0;
   let jkRemoved = 0;
+  let eventCoinsRemoved = 0;
 
   for (const tx of transactions) {
     if (tx.type !== 'ADMIN_DELETE') continue;
@@ -257,15 +287,24 @@ function aggregateAdminDeletes(transactions) {
     const userId = tx.user?.discordId;
     if (userId) players.add(userId);
 
-    const removedCoinValue = Math.abs(toCoinValue(tx));
     entries += 1;
-    coinValueRemoved += removedCoinValue;
 
-    if (tx.currency === 'COINS') coinsRemoved += Math.abs(tx.amount);
-    if (tx.currency === 'JK') jkRemoved += Math.abs(tx.amount);
+    if (tx.currency === 'COINS') {
+      coinsRemoved += Math.abs(tx.amount);
+      coinValueRemoved += Math.abs(tx.amount);
+    }
+
+    if (tx.currency === 'JK') {
+      jkRemoved += Math.abs(tx.amount);
+      coinValueRemoved += Math.abs(tx.amount) * JK_TO_COINS_RATE;
+    }
+
+    if (tx.currency === 'EVENT_COINS') {
+      eventCoinsRemoved += Math.abs(tx.amount);
+    }
   }
 
-  return { players: players.size, entries, coinValueRemoved, coinsRemoved, jkRemoved };
+  return { players: players.size, entries, coinValueRemoved, coinsRemoved, jkRemoved, eventCoinsRemoved };
 }
 
 function aggregateAntiMartingale(transactions) {
@@ -292,8 +331,23 @@ async function getIncludedUserCount() {
   });
 }
 
+async function getEventCoinsInCirculation() {
+  const result = await prisma.user.aggregate({
+    where: {
+      discordId: {
+        notIn: EXCLUDED_USER_IDS
+      }
+    },
+    _sum: {
+      eventCoins: true
+    }
+  });
+
+  return result._sum.eventCoins || 0;
+}
+
 async function getCasinoControlStats() {
-  const [transactions, includedUserCount] = await Promise.all([
+  const [transactions, includedUserCount, eventCoinsInCirculation] = await Promise.all([
     prisma.transaction.findMany({
       where: {
         user: {
@@ -303,6 +357,7 @@ async function getCasinoControlStats() {
         }
       },
       select: {
+        id: true,
         type: true,
         currency: true,
         amount: true,
@@ -317,7 +372,8 @@ async function getCasinoControlStats() {
       },
       orderBy: { createdAt: 'asc' }
     }),
-    getIncludedUserCount()
+    getIncludedUserCount(),
+    getEventCoinsInCirculation()
   ]);
 
   const gameStats = GAME_DEFINITIONS.map(definition => aggregateGameStats(transactions, definition));
@@ -329,8 +385,10 @@ async function getCasinoControlStats() {
   const antiMartingale = aggregateAntiMartingale(transactions);
 
   const coinflipTaxCollected = gameStats.reduce((sum, game) => sum + (game.taxCollected || 0), 0);
-  const gameCasinoProfit = gameStats.reduce((sum, game) => sum + game.casinoProfit, 0);
-  const rodCasinoProfit = rods.coinsSpent;
+  const eventCoinsUsedInGames = gameStats.reduce((sum, game) => sum + game.totalEventCoinSpent, 0);
+  const normalCoinsUsedInGames = gameStats.reduce((sum, game) => sum + game.totalNormalCoinSpent, 0);
+  const gameCenterProfit = gameStats.reduce((sum, game) => sum + game.gameCenterProfit, 0);
+  const rodCenterProfit = rods.coinsSpent;
   const startingBonusLoss = includedUserCount * STARTING_COINS;
 
   const operatingLosses = {
@@ -339,13 +397,15 @@ async function getCasinoControlStats() {
     startingBonusLoss,
     dailyLoss: daily.coinsPaid,
     adminGiveawayLoss: adminGiveaways.coinValuePaid,
+    adminEventGiveawayLoss: adminGiveaways.eventCoinsPaid,
     adminDeleteRecovery: adminDeletes.coinValueRemoved,
-    totalGrossLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid,
-    totalLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid - adminDeletes.coinValueRemoved
+    adminEventDeleteRecovery: adminDeletes.eventCoinsRemoved,
+    totalGrossLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid + adminGiveaways.eventCoinsPaid,
+    totalLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid + adminGiveaways.eventCoinsPaid - adminDeletes.coinValueRemoved - adminDeletes.eventCoinsRemoved
   };
 
-  const totalCasinoProfitBeforeOperatingLosses = gameCasinoProfit + rodCasinoProfit;
-  const totalCasinoProfit = totalCasinoProfitBeforeOperatingLosses - operatingLosses.totalLoss;
+  const totalCenterProfitBeforeOperatingLosses = gameCenterProfit + rodCenterProfit;
+  const totalCenterProfit = totalCenterProfitBeforeOperatingLosses - operatingLosses.totalLoss;
 
   const totalPlayers = new Set();
   for (const tx of transactions) {
@@ -358,12 +418,15 @@ async function getCasinoControlStats() {
     totalPlayers: totalPlayers.size,
     includedUserCount,
     totalTransactions: transactions.length,
-    gameCasinoProfit,
+    gameCenterProfit,
     coinflipTaxCollected,
-    rodCasinoProfit,
-    totalCasinoProfitBeforeOperatingLosses,
+    rodCenterProfit,
+    totalCenterProfitBeforeOperatingLosses,
     operatingLosses,
-    totalCasinoProfit,
+    totalCenterProfit,
+    eventCoinsInCirculation,
+    eventCoinsUsedInGames,
+    normalCoinsUsedInGames,
     games: gameStats,
     daily,
     convert,
@@ -379,10 +442,12 @@ function buildGameFieldValue(game) {
     `參與玩家：**${formatNumber(game.playerCount)}**`,
     `局數 / 次數：**${formatNumber(game.rounds)}**`,
     `${game.betLabel}：**${formatCoins(game.totalBetOrCost)}**`,
+    `正式金幣投入：**${formatCoins(game.totalNormalCoinSpent)}**`,
+    `活動金幣投入：**${formatEventCoins(game.totalEventCoinSpent)}**`,
     `玩家獲得總額：**${formatCoins(game.totalPaid)}**`,
-    `遊戲中心淨利：**${formatCoins(game.casinoProfit)}**`,
+    `遊戲中心淨結果：**${formatCoins(game.gameCenterProfit)}**`,
     `玩家淨結果：**${formatCoins(game.playerNet)}**`,
-    game.taxCollected > 0 ? `扣稅收入：**+${formatCoins(game.taxCollected)}**（已包含在遊戲中心淨利）` : null,
+    game.taxCollected > 0 ? `扣稅收入：**+${formatCoins(game.taxCollected)}**（已包含在遊戲中心淨結果）` : null,
     game.grossPayoutBeforeTax > 0 ? `稅前獎金總額：**${formatCoins(game.grossPayoutBeforeTax)}**` : null,
     `返還率：**${game.payoutRate}**`,
     `獲獎筆數比例：**${game.payoutEventRate}**`
@@ -401,6 +466,7 @@ module.exports = {
   getCasinoControlStats,
   buildGameFieldValue,
   formatCoins,
+  formatEventCoins,
   formatJK,
   formatNumber
 };

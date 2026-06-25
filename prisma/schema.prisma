@@ -12,6 +12,7 @@ model User {
   discordId      String        @unique
   username       String?
   coins          Int           @default(0)
+  eventCoins     Int           @default(0)
   jkBalance      Int           @default(0)
   lastDaily      DateTime?
   lastFish       DateTime?
@@ -44,19 +45,21 @@ model Transaction {
 }
 
 model MinesGame {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messageId String?
-  channelId String?
-  bet       Int
-  mines     Int
-  board     Json
-  revealed  Json     @default("[]")
-  status    String   @default("ACTIVE")
-  payout    Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId       String?
+  channelId       String?
+  bet             Int
+  normalCoinStake Int      @default(0)
+  eventCoinStake  Int      @default(0)
+  mines           Int
+  board           Json
+  revealed        Json     @default("[]")
+  status          String   @default("ACTIVE")
+  payout          Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model LeaderboardCache {
@@ -76,7 +79,6 @@ model GuildConfig {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
-
 
 model PendingJkConversion {
   id                 String   @id @default(cuid())
@@ -100,7 +102,6 @@ model TheftAttempt {
   amount    Int      @default(0)
   createdAt DateTime @default(now())
 }
-
 
 model AdminWarningLog {
   id                        String   @id @default(cuid())
