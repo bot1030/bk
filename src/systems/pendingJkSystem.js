@@ -127,10 +127,88 @@ async function getPendingStealableCoins(userId) {
   return summary.pendingCoins;
 }
 
+
+async function deletePendingJkForUserId(userId, jkAmount, type = 'ADMIN_DELETE', reason = null) {
+  if (!Number.isInteger(jkAmount) || jkAmount <= 0) {
+    throw new Error('jkAmount must be a positive integer.');
+  }
+
+  await settleMaturePendingJkForUserId(userId);
+
+  const coinAmountToDelete = jkAmount * JK_CONVERSION_RATE;
+  const rows = await prisma.pendingJkConversion.findMany({
+    where: {
+      userId,
+      status: PENDING_STATUS.PENDING,
+      coinAmount: { gt: 0 }
+    },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  const pendingCoinsBefore = rows.reduce((sum, row) => sum + row.coinAmount, 0);
+
+  if (pendingCoinsBefore < coinAmountToDelete) {
+    return {
+      ok: false,
+      message: '待結算 JK餘額不足',
+      pendingCoinsBefore,
+      pendingJkBefore: Math.floor(pendingCoinsBefore / JK_CONVERSION_RATE)
+    };
+  }
+
+  return prisma.$transaction(async tx => {
+    let remaining = coinAmountToDelete;
+
+    for (const row of rows) {
+      if (remaining <= 0) break;
+
+      const removeCoins = Math.min(row.coinAmount, remaining);
+      const newCoinAmount = row.coinAmount - removeCoins;
+      remaining -= removeCoins;
+
+      await tx.pendingJkConversion.update({
+        where: { id: row.id },
+        data: {
+          coinAmount: newCoinAmount,
+          status: newCoinAmount <= 0 ? 'DELETED' : PENDING_STATUS.PENDING
+        }
+      });
+    }
+
+    const pendingCoinsAfter = pendingCoinsBefore - coinAmountToDelete;
+
+    await tx.transaction.create({
+      data: {
+        userId,
+        type,
+        currency: 'PENDING_JK',
+        amount: -jkAmount,
+        balanceBefore: Math.floor(pendingCoinsBefore / JK_CONVERSION_RATE),
+        balanceAfter: Math.floor(pendingCoinsAfter / JK_CONVERSION_RATE),
+        reason
+      }
+    });
+
+    const user = await tx.user.findUnique({ where: { id: userId } });
+
+    return {
+      ok: true,
+      user,
+      deletedJk: jkAmount,
+      deletedCoinValue: coinAmountToDelete,
+      pendingCoinsBefore,
+      pendingCoinsAfter,
+      pendingJkBefore: Math.floor(pendingCoinsBefore / JK_CONVERSION_RATE),
+      pendingJkAfter: Math.floor(pendingCoinsAfter / JK_CONVERSION_RATE)
+    };
+  });
+}
+
 module.exports = {
   PENDING_STATUS,
   createPendingJkConversion,
   settleMaturePendingJkForUserId,
   getPendingJkSummaryByUserId,
-  getPendingStealableCoins
+  getPendingStealableCoins,
+  deletePendingJkForUserId
 };

@@ -71,7 +71,7 @@ module.exports = {
           `管理員新增金幣 / JK：**${formatCoins(stats.operatingLosses.adminGiveawayLoss)}**`,
           `管理員新增活動金幣：**${formatEventCoins(stats.operatingLosses.adminEventGiveawayLoss)}**`,
           `發放成本小計：**${formatCoins(stats.operatingLosses.totalGrossLoss)}**`,
-          `管理員刪除金幣 / JK 回收：**-${formatCoins(stats.operatingLosses.adminDeleteRecovery)}**`,
+          `管理員刪除金幣 / JK / 待結算 JK 回收：**-${formatCoins(stats.operatingLosses.adminDeleteRecovery)}**`,
           `管理員刪除活動金幣回收：**-${formatEventCoins(stats.operatingLosses.adminEventDeleteRecovery)}**`,
           `最終營運成本：**${formatCoins(stats.operatingLosses.totalLoss)}**`
         ].join('\n'),
@@ -136,6 +136,7 @@ module.exports = {
           `金幣刪除：**${formatCoins(stats.adminDeletes.coinsRemoved)}**`,
           `活動金幣刪除：**${formatEventCoins(stats.adminDeletes.eventCoinsRemoved)}**`,
           `JK刪除：**${formatJK(stats.adminDeletes.jkRemoved)}**`,
+          `待結算 JK刪除：**${formatJK(stats.adminDeletes.pendingJkRemoved || 0)}**`,
           `折算回收總額：**${formatCoins(stats.adminDeletes.coinValueRemoved + stats.adminDeletes.eventCoinsRemoved)}**`
         ].join('\n'),
         inline: false

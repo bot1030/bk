@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { spendCoins, spendEventCoins, spendJK, getBalance } = require('../systems/economySystem');
+const { spendCoins, spendEventCoins, spendJK, spendPendingJK, getBalance } = require('../systems/economySystem');
+const { getPendingJkSummaryByUserId } = require('../systems/pendingJkSystem');
 const { formatCoins, formatEventCoins, formatCoinsWithEvent, formatJK } = require('../utils/format');
 
 const ALLOWED_USER_IDS = new Set([
@@ -11,7 +12,7 @@ const ALLOWED_USER_IDS = new Set([
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('delete')
-    .setDescription('管理員專用：刪除玩家的金幣、活動金幣或 JK餘額')
+    .setDescription('管理員專用：刪除玩家的金幣、活動金幣、JK餘額或待結算 JK餘額')
     .addUserOption(option =>
       option
         .setName('user')
@@ -26,7 +27,8 @@ module.exports = {
         .addChoices(
           { name: '金幣', value: 'coins' },
           { name: '活動金幣', value: 'event_coins' },
-          { name: 'JK餘額', value: 'jk' }
+          { name: 'JK餘額', value: 'jk' },
+          { name: '待結算 JK餘額', value: 'pending_jk' }
         )
     )
     .addIntegerOption(option =>
@@ -63,6 +65,19 @@ module.exports = {
       result = await spendJK(target, amount, 'ADMIN_DELETE', `管理員 ${interaction.user.tag} 刪除 JK餘額`);
       formattedAmount = formatJK(amount);
       currencyLabel = 'JK餘額';
+    } else if (currency === 'pending_jk') {
+      const pending = await getPendingJkSummaryByUserId(current.id);
+      const currentPendingJk = Math.floor((pending.pendingCoins || 0) / 1000);
+
+      if (currentPendingJk < amount) {
+        return interaction.reply({
+          content: `❌ 目標使用者的待結算 JK餘額不足。\n目前待結算 JK餘額：約 **${formatJK(currentPendingJk)}**\n嘗試刪除：**${formatJK(amount)}**`
+        });
+      }
+
+      result = await spendPendingJK(target, amount, 'ADMIN_DELETE', `管理員 ${interaction.user.tag} 刪除待結算 JK餘額`);
+      formattedAmount = formatJK(amount);
+      currencyLabel = '待結算 JK餘額';
     } else if (currency === 'event_coins') {
       if ((current.eventCoins || 0) < amount) {
         return interaction.reply({
@@ -101,8 +116,9 @@ module.exports = {
         `刪除數量：**${formattedAmount}**`,
         '',
         `目前金幣：**${formatCoinsWithEvent(updated.coins, updated.eventCoins)}**`,
-        `目前 JK餘額：**${formatJK(updated.jkBalance)}**`
-      ].join('\n'));
+        `目前 JK餘額：**${formatJK(updated.jkBalance)}**`,
+        currency === 'pending_jk' ? `目前待結算 JK餘額：約 **${formatJK(result.pendingJkAfter || 0)}**` : null
+      ].filter(Boolean).join('\n'));
 
     return interaction.reply({ embeds: [embed] });
   }

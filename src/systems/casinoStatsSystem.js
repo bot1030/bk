@@ -67,6 +67,7 @@ function formatJK(value) {
 function toCoinValue(transaction) {
   const amount = Number(transaction.amount || 0);
   if (transaction.currency === 'JK') return amount * JK_TO_COINS_RATE;
+  if (transaction.currency === 'PENDING_JK') return amount * JK_TO_COINS_RATE;
   return amount;
 }
 
@@ -279,6 +280,7 @@ function aggregateAdminDeletes(transactions) {
   let coinsRemoved = 0;
   let jkRemoved = 0;
   let eventCoinsRemoved = 0;
+  let pendingJkRemoved = 0;
 
   for (const tx of transactions) {
     if (tx.type !== 'ADMIN_DELETE') continue;
@@ -302,9 +304,14 @@ function aggregateAdminDeletes(transactions) {
     if (tx.currency === 'EVENT_COINS') {
       eventCoinsRemoved += Math.abs(tx.amount);
     }
+
+    if (tx.currency === 'PENDING_JK') {
+      pendingJkRemoved += Math.abs(tx.amount);
+      coinValueRemoved += Math.abs(tx.amount) * JK_TO_COINS_RATE;
+    }
   }
 
-  return { players: players.size, entries, coinValueRemoved, coinsRemoved, jkRemoved, eventCoinsRemoved };
+  return { players: players.size, entries, coinValueRemoved, coinsRemoved, jkRemoved, pendingJkRemoved, eventCoinsRemoved };
 }
 
 function aggregateAntiMartingale(transactions) {

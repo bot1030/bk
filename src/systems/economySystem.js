@@ -1,6 +1,6 @@
 const prisma = require('../database/prisma');
 const { STARTING_COINS } = require('../config/economyConfig');
-const { settleMaturePendingJkForUserId } = require('./pendingJkSystem');
+const { settleMaturePendingJkForUserId, deletePendingJkForUserId } = require('./pendingJkSystem');
 
 const GAME_SPEND_TYPES = new Set(['COINFLIP', 'SLOTS', 'MINES', 'FISHING']);
 
@@ -302,6 +302,12 @@ async function spendJK(discordUser, amount, type = 'SYSTEM', reason = null) {
   return { ok: true, user: updated };
 }
 
+
+async function spendPendingJK(discordUser, amount, type = 'ADMIN_DELETE', reason = null) {
+  const user = await getOrCreateUser(discordUser);
+  return deletePendingJkForUserId(user.id, amount, type, reason);
+}
+
 module.exports = {
   GAME_SPEND_TYPES,
   getOrCreateUser,
@@ -312,5 +318,6 @@ module.exports = {
   spendPlayableCoins,
   spendEventCoins,
   addJK,
-  spendJK
+  spendJK,
+  spendPendingJK
 };
