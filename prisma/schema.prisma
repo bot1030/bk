@@ -117,3 +117,57 @@ model AdminWarningLog {
 
   @@index([targetDiscordId, alertType, createdAt])
 }
+
+model DoneRatingRequest {
+  id                String   @id @default(cuid())
+  guildId           String
+  sourceChannelId   String
+  sourceMessageId   String?
+  commentChannelId  String
+  createdByDiscordId String
+  reviewerDiscordId String?
+  rating            Int?
+  comment           String?
+  status            String   @default("PENDING")
+  expiresAt         DateTime
+  completedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([guildId, status, expiresAt])
+}
+
+model RedPacket {
+  id               String   @id @default(cuid())
+  guildId          String
+  channelId        String
+  messageId        String?
+  creatorDiscordId String
+  currency         String
+  totalAmount      Int
+  remainingAmount  Int
+  playerLimit      Int
+  claimedCount     Int      @default(0)
+  bestLuckUserId   String?
+  bestLuckAmount   Int      @default(0)
+  status           String   @default("ACTIVE")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  claims           RedPacketClaim[]
+
+  @@index([guildId, status, createdAt])
+}
+
+model RedPacketClaim {
+  id             String   @id @default(cuid())
+  redPacketId    String
+  redPacket      RedPacket @relation(fields: [redPacketId], references: [id], onDelete: Cascade)
+  discordId      String
+  username       String?
+  amount         Int
+  currency       String
+  createdAt      DateTime @default(now())
+
+  @@unique([redPacketId, discordId])
+  @@index([discordId, createdAt])
+}
