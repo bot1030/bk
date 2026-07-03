@@ -2,6 +2,7 @@ const { MessageFlags } = require('discord.js');
 const { handlePanelButton, handlePanelModal, handlePanelSelect } = require('../systems/gamePanelSystem');
 const { handleRoleShopSelect } = require('../systems/roleShopPanelSystem');
 const { handleCommentButton, handleCommentModal } = require('../systems/commentSystem');
+const { handleRedPacketButton } = require('../systems/redPacketSystem');
 
 module.exports = {
   name: 'interactionCreate',
@@ -24,7 +25,7 @@ module.exports = {
           return await command.handleButton(interaction);
         }
 
-        // Backward compatibility for older convert buttons already posted before this update.
+        // Backward compatibility for older convert buttons already posted before the dropdown update.
         if (interaction.customId.startsWith('convert:')) {
           const command = interaction.client.commands.get('兌換');
           if (!command || !command.execute) return;
@@ -49,8 +50,18 @@ module.exports = {
           return await command.handleActionButton(interaction);
         }
 
+        if (interaction.customId.startsWith('history:')) {
+          const command = interaction.client.commands.get('history');
+          if (!command || !command.handleButton) return;
+          return await command.handleButton(interaction);
+        }
+
         if (interaction.customId.startsWith('comment:')) {
           return await handleCommentButton(interaction);
+        }
+
+        if (interaction.customId.startsWith('red_packet:')) {
+          return await handleRedPacketButton(interaction);
         }
       }
 
@@ -86,8 +97,6 @@ module.exports = {
         }
       }
     } catch (error) {
-      // 10062 normally means the interaction token already expired or another bot instance answered it.
-      // Do not crash the bot for this; just log the concise reason.
       if (error?.code === 10062) {
         console.warn('⚠️ Discord interaction expired or was already handled. Avoid running Railway and local bot at the same time.');
         return;

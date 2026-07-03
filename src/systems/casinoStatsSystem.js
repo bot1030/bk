@@ -66,8 +66,7 @@ function formatJK(value) {
 
 function toCoinValue(transaction) {
   const amount = Number(transaction.amount || 0);
-  if (transaction.currency === 'JK') return amount * JK_TO_COINS_RATE;
-  if (transaction.currency === 'PENDING_JK') return amount * JK_TO_COINS_RATE;
+  if (transaction.currency === 'JK' || transaction.currency === 'PENDING_JK') return amount * JK_TO_COINS_RATE;
   return amount;
 }
 
@@ -200,7 +199,7 @@ function aggregateConvert(transactions) {
   let entries = 0;
 
   for (const tx of transactions) {
-    if (tx.type !== 'CONVERT') continue;
+    if (tx.type !== 'CONVERT' && tx.type !== 'CONVERT_SETTLE') continue;
     entries += 1;
     const userId = tx.user?.discordId;
     if (userId) players.add(userId);
@@ -273,14 +272,49 @@ function aggregateAdminGiveaways(transactions) {
   return { players: players.size, entries, coinValuePaid, coinsPaid, jkPaid, eventCoinsPaid };
 }
 
+function aggregateRedPackets(transactions) {
+  const players = new Set();
+  let entries = 0;
+  let coinValuePaid = 0;
+  let coinsPaid = 0;
+  let jkPaid = 0;
+  let eventCoinsPaid = 0;
+
+  for (const tx of transactions) {
+    if (tx.type !== 'RED_PACKET') continue;
+    if (tx.amount <= 0) continue;
+
+    const userId = tx.user?.discordId;
+    if (userId) players.add(userId);
+
+    entries += 1;
+
+    if (tx.currency === 'COINS') {
+      coinsPaid += tx.amount;
+      coinValuePaid += tx.amount;
+    }
+
+    if (tx.currency === 'JK') {
+      jkPaid += tx.amount;
+      coinValuePaid += tx.amount * JK_TO_COINS_RATE;
+    }
+
+    if (tx.currency === 'EVENT_COINS') {
+      eventCoinsPaid += tx.amount;
+    }
+  }
+
+  return { players: players.size, entries, coinValuePaid, coinsPaid, jkPaid, eventCoinsPaid };
+}
+
 function aggregateAdminDeletes(transactions) {
   const players = new Set();
   let entries = 0;
   let coinValueRemoved = 0;
   let coinsRemoved = 0;
   let jkRemoved = 0;
-  let eventCoinsRemoved = 0;
   let pendingJkRemoved = 0;
+  let eventCoinsRemoved = 0;
 
   for (const tx of transactions) {
     if (tx.type !== 'ADMIN_DELETE') continue;
@@ -301,13 +335,13 @@ function aggregateAdminDeletes(transactions) {
       coinValueRemoved += Math.abs(tx.amount) * JK_TO_COINS_RATE;
     }
 
-    if (tx.currency === 'EVENT_COINS') {
-      eventCoinsRemoved += Math.abs(tx.amount);
-    }
-
     if (tx.currency === 'PENDING_JK') {
       pendingJkRemoved += Math.abs(tx.amount);
       coinValueRemoved += Math.abs(tx.amount) * JK_TO_COINS_RATE;
+    }
+
+    if (tx.currency === 'EVENT_COINS') {
+      eventCoinsRemoved += Math.abs(tx.amount);
     }
   }
 
@@ -388,6 +422,7 @@ async function getCasinoControlStats() {
   const convert = aggregateConvert(transactions);
   const rods = aggregateRodPurchases(transactions);
   const adminGiveaways = aggregateAdminGiveaways(transactions);
+  const redPackets = aggregateRedPackets(transactions);
   const adminDeletes = aggregateAdminDeletes(transactions);
   const antiMartingale = aggregateAntiMartingale(transactions);
 
@@ -398,6 +433,16 @@ async function getCasinoControlStats() {
   const rodCenterProfit = rods.coinsSpent;
   const startingBonusLoss = includedUserCount * STARTING_COINS;
 
+  const grossOperatingLoss =
+    startingBonusLoss +
+    daily.coinsPaid +
+    adminGiveaways.coinValuePaid +
+    adminGiveaways.eventCoinsPaid +
+    redPackets.coinValuePaid +
+    redPackets.eventCoinsPaid;
+
+  const totalDeleteRecovery = adminDeletes.coinValueRemoved + adminDeletes.eventCoinsRemoved;
+
   const operatingLosses = {
     startingBonusUsers: includedUserCount,
     startingBonusPerUser: STARTING_COINS,
@@ -405,10 +450,12 @@ async function getCasinoControlStats() {
     dailyLoss: daily.coinsPaid,
     adminGiveawayLoss: adminGiveaways.coinValuePaid,
     adminEventGiveawayLoss: adminGiveaways.eventCoinsPaid,
+    redPacketLoss: redPackets.coinValuePaid,
+    redPacketEventLoss: redPackets.eventCoinsPaid,
     adminDeleteRecovery: adminDeletes.coinValueRemoved,
     adminEventDeleteRecovery: adminDeletes.eventCoinsRemoved,
-    totalGrossLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid + adminGiveaways.eventCoinsPaid,
-    totalLoss: startingBonusLoss + daily.coinsPaid + adminGiveaways.coinValuePaid + adminGiveaways.eventCoinsPaid - adminDeletes.coinValueRemoved - adminDeletes.eventCoinsRemoved
+    totalGrossLoss: grossOperatingLoss,
+    totalLoss: grossOperatingLoss - totalDeleteRecovery
   };
 
   const totalCenterProfitBeforeOperatingLosses = gameCenterProfit + rodCenterProfit;
@@ -439,6 +486,7 @@ async function getCasinoControlStats() {
     convert,
     rods,
     adminGiveaways,
+    redPackets,
     adminDeletes,
     antiMartingale
   };

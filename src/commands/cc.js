@@ -70,6 +70,8 @@ module.exports = {
           `每日獎勵發放：**${formatCoins(stats.operatingLosses.dailyLoss)}**`,
           `管理員新增金幣 / JK：**${formatCoins(stats.operatingLosses.adminGiveawayLoss)}**`,
           `管理員新增活動金幣：**${formatEventCoins(stats.operatingLosses.adminEventGiveawayLoss)}**`,
+          `福袋發放金幣 / JK：**${formatCoins(stats.operatingLosses.redPacketLoss)}**`,
+          `福袋發放活動金幣：**${formatEventCoins(stats.operatingLosses.redPacketEventLoss)}**`,
           `發放成本小計：**${formatCoins(stats.operatingLosses.totalGrossLoss)}**`,
           `管理員刪除金幣 / JK / 待結算 JK 回收：**-${formatCoins(stats.operatingLosses.adminDeleteRecovery)}**`,
           `管理員刪除活動金幣回收：**-${formatEventCoins(stats.operatingLosses.adminEventDeleteRecovery)}**`,
@@ -83,6 +85,18 @@ module.exports = {
           `領取玩家：**${formatNumber(stats.daily.players)}**`,
           `領取次數：**${formatNumber(stats.daily.claims)}**`,
           `發放金幣：**${formatCoins(stats.daily.coinsPaid)}**`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '🧧 福袋發放',
+        value: [
+          `領取玩家：**${formatNumber(stats.redPackets.players)}**`,
+          `領取筆數：**${formatNumber(stats.redPackets.entries)}**`,
+          `金幣發放：**${formatCoins(stats.redPackets.coinsPaid)}**`,
+          `活動金幣發放：**${formatEventCoins(stats.redPackets.eventCoinsPaid)}**`,
+          `JK發放：**${formatJK(stats.redPackets.jkPaid)}**`,
+          `折算總成本：**${formatCoins(stats.redPackets.coinValuePaid + stats.redPackets.eventCoinsPaid)}**`
         ].join('\n'),
         inline: false
       },

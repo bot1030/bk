@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const prisma = require('../database/prisma');
-const { formatCoins, formatCoinsWithEvent, formatNumber } = require('../utils/format');
+const { formatCoinsWithEvent, formatNumber } = require('../utils/format');
 const { ROLE_SHOP } = require('../config/roleShopConfig');
 
 const ADMIN_USER_IDS = [
@@ -12,7 +12,9 @@ const ADMIN_USER_IDS = [
 const LOOKBACK_DAYS = 30;
 const WARNING_THRESHOLD = 15;
 const HIGH_WARNING_THRESHOLD = 20;
-const GAME_TRANSACTION_TYPES = ['COINFLIP', 'SLOTS', 'MINES', 'FISHING'];
+
+// Fishing is intentionally excluded. Only these count as actual games for this warning.
+const GAME_TRANSACTION_TYPES = ['COINFLIP', 'SLOTS', 'MINES'];
 
 function getLookbackStart() {
   return new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
@@ -26,11 +28,11 @@ function buildReasonLines({ gameTransactionCount, coinReductionCount }) {
   const reasons = [];
 
   if (gameTransactionCount === 0) {
-    reasons.push('最近 30 天沒有任何遊戲交易紀錄');
+    reasons.push('最近 30 天沒有硬幣翻轉、幸運轉盤或踩地雷紀錄');
   }
 
   if (coinReductionCount === 0) {
-    reasons.push('最近 30 天沒有任何金幣或活動金幣扣除紀錄');
+    reasons.push('最近 30 天沒有硬幣翻轉、幸運轉盤或踩地雷的金幣扣除紀錄');
   }
 
   return reasons;
@@ -95,6 +97,7 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
     prisma.transaction.count({
       where: {
         userId: user.id,
+        type: { in: GAME_TRANSACTION_TYPES },
         currency: { in: ['COINS', 'EVENT_COINS'] },
         amount: { lt: 0 },
         createdAt: { gte: since }
@@ -108,8 +111,8 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
   if (reasonLines.length === 0) return null;
 
   const alertType = dailyClaimCount >= HIGH_WARNING_THRESHOLD
-    ? 'DAILY_FARMING_20_PLUS'
-    : 'DAILY_FARMING_15_PLUS';
+    ? 'DAILY_FARMING_20_PLUS_MAIN_GAMES_ONLY'
+    : 'DAILY_FARMING_15_PLUS_MAIN_GAMES_ONLY';
 
   const alreadySent = await hasRecentAlert(discordUser.id, alertType, since);
   if (alreadySent) return null;
@@ -122,16 +125,16 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
       `伺服器：**${guild?.name || '未知伺服器'}**`,
       '',
       `最近 **${LOOKBACK_DAYS} 天**每日領取次數：**${formatNumber(dailyClaimCount)}**`,
-      `遊戲交易次數：**${formatNumber(gameTransactionCount)}**`,
-      `金幣扣除次數：**${formatNumber(coinReductionCount)}**`,
+      `主要遊戲次數：**${formatNumber(gameTransactionCount)}**`,
+      `主要遊戲扣除次數：**${formatNumber(coinReductionCount)}**`,
       `目前金幣：**${formatCoinsWithEvent(user.coins, user.eventCoins)}**`,
       '',
       '觸發原因：',
       ...reasonLines.map(reason => `• ${reason}`),
       '',
-      '此通知只是提醒，不會自動處罰玩家。請人工確認是否只是正常囤幣。'
+      '釣魚不會計入主要遊戲紀錄。此通知只是提醒，不會自動處罰玩家。'
     ].join('\n'))
-    .setFooter({ text: '觸發條件：最近 30 天每日領取 ≥ 15 次，且無遊戲紀錄或無金幣扣除紀錄。' })
+    .setFooter({ text: '觸發條件：最近 30 天每日領取 ≥ 15 次，且沒有主要遊戲紀錄或主要遊戲扣除紀錄。' })
     .setTimestamp();
 
   await sendAdminDms(client, embed);
@@ -163,5 +166,6 @@ module.exports = {
   ADMIN_USER_IDS,
   LOOKBACK_DAYS,
   WARNING_THRESHOLD,
-  HIGH_WARNING_THRESHOLD
+  HIGH_WARNING_THRESHOLD,
+  GAME_TRANSACTION_TYPES
 };
