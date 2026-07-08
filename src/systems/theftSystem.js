@@ -73,19 +73,22 @@ async function deductFromPendingRows(tx, victimId, amountToSteal) {
   return stolen;
 }
 
-async function attemptSteal(thiefDiscordUser, victimDiscordUser) {
+async function attemptSteal(thiefDiscordUser, victimDiscordUser, options = {}) {
+  const adminOverride = Boolean(options.adminOverride);
   const thief = await getOrCreateUser(thiefDiscordUser);
   const victim = await getOrCreateUser(victimDiscordUser);
 
-  const lastAttempt = await getLastTheftAttempt(thief.id);
-  const cooldownRemaining = getCooldownRemaining(lastAttempt?.createdAt, ROLE_SHOP.thief.cooldownMs);
-  if (cooldownRemaining > 0) {
-    return { ok: false, code: 'COOLDOWN', cooldownRemaining };
-  }
+  if (!adminOverride) {
+    const lastAttempt = await getLastTheftAttempt(thief.id);
+    const cooldownRemaining = getCooldownRemaining(lastAttempt?.createdAt, ROLE_SHOP.thief.cooldownMs);
+    if (cooldownRemaining > 0) {
+      return { ok: false, code: 'COOLDOWN', cooldownRemaining };
+    }
 
-  const victimSuccess = await getRecentVictimSuccess(victim.id);
-  if (victimSuccess) {
-    return { ok: false, code: 'VICTIM_PROTECTED' };
+    const victimSuccess = await getRecentVictimSuccess(victim.id);
+    if (victimSuccess) {
+      return { ok: false, code: 'VICTIM_PROTECTED' };
+    }
   }
 
   const pendingSummary = await getPendingJkSummaryByUserId(victim.id);
@@ -104,7 +107,10 @@ async function attemptSteal(thiefDiscordUser, victimDiscordUser) {
   }
 
   const tier = getTheftTier(stealableCoins);
-  const success = rollChance(tier.successChancePercent);
+  const effectiveTier = adminOverride
+    ? { ...tier, successChancePercent: 99 }
+    : tier;
+  const success = rollChance(effectiveTier.successChancePercent);
 
   if (!success) {
     const penalty = Math.min(ROLE_SHOP.thief.failPenaltyCoins, thief.coins);
@@ -147,7 +153,7 @@ async function attemptSteal(thiefDiscordUser, victimDiscordUser) {
       ok: true,
       success: false,
       penalty,
-      tier,
+      tier: effectiveTier,
       thief: updatedThief
     };
   }
@@ -251,7 +257,7 @@ async function attemptSteal(thiefDiscordUser, victimDiscordUser) {
     coinPart: result.coinPart,
     pendingPart: result.pendingPart,
     percent,
-    tier,
+    tier: effectiveTier,
     thief: result.updatedThief,
     victim: result.updatedVictim
   };

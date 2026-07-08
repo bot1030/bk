@@ -4,6 +4,16 @@ const { roleCollectionHas } = require('../systems/roleBenefitSystem');
 const { attemptSteal } = require('../systems/theftSystem');
 const { formatCoins, formatDuration } = require('../utils/format');
 
+const ADMIN_USER_IDS = new Set([
+  '473647287026057227',
+  '786683877107302461',
+  '1319968425698922591'
+]);
+
+function isAdmin(userId) {
+  return ADMIN_USER_IDS.has(userId);
+}
+
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
@@ -58,9 +68,10 @@ module.exports = {
   async execute(interaction) {
     const target = interaction.options.getUser('user');
 
+    const adminMode = isAdmin(interaction.user.id);
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
-    if (!roleCollectionHas(member, ROLE_SHOP.thief.roleId)) {
+    if (!adminMode && !roleCollectionHas(member, ROLE_SHOP.thief.roleId)) {
       return interaction.reply(privatePayload({
         content: `❌ 你需要擁有 🕵️ **${ROLE_SHOP.thief.roleName}** 才能使用 /偷竊。`
       }));
@@ -78,7 +89,7 @@ module.exports = {
 
     await interaction.deferReply();
 
-    const result = await attemptSteal(interaction.user, target);
+    const result = await attemptSteal(interaction.user, target, { adminOverride: adminMode });
 
     if (!result.ok) {
       if (result.code === 'COOLDOWN') {
@@ -109,7 +120,7 @@ module.exports = {
         .setDescription([
           `<@${interaction.user.id}> 嘗試偷竊 <@${target.id}>，但是被發現了。`,
           `扣除罰金：**${formatCoins(result.penalty)}**`,
-          `下次偷竊：**24 小時後**`
+          adminMode ? '下次偷竊：**無冷卻**' : `下次偷竊：**24 小時後**`
         ].join('\n'));
 
       return interaction.editReply({ embeds: [embed] });
@@ -119,7 +130,7 @@ module.exports = {
       `<@${interaction.user.id}> 成功偷竊了 <@${target.id}>。`,
       `偷到金額：**${formatCoins(result.amount)}**`,
       `本次上限：**${formatCoins(ROLE_SHOP.thief.maxStealCoins)}**`,
-      `下次偷竊：**24 小時後**`
+      adminMode ? '下次偷竊：**無冷卻**' : `下次偷竊：**24 小時後**`
     ];
 
     if (result.pendingPart > 0) {
