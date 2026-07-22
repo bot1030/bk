@@ -2,7 +2,7 @@ const prisma = require('../database/prisma');
 const { STARTING_COINS } = require('../config/economyConfig');
 const { settleMaturePendingJkForUserId, deletePendingJkForUserId } = require('./pendingJkSystem');
 
-const GAME_SPEND_TYPES = new Set(['COINFLIP', 'SLOTS', 'MINES', 'FISHING']);
+const GAME_SPEND_TYPES = new Set(['COINFLIP', 'SLOTS', 'MINES', 'FISHING', 'LUCKY_BLOCK']);
 
 function shouldUseEventCoins(type) {
   return GAME_SPEND_TYPES.has(String(type || '').toUpperCase());

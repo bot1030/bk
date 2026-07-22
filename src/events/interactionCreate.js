@@ -3,6 +3,7 @@ const { handlePanelButton, handlePanelModal, handlePanelSelect } = require('../s
 const { handleRoleShopSelect } = require('../systems/roleShopPanelSystem');
 const { handleCommentButton, handleCommentModal } = require('../systems/commentSystem');
 const { handleRedPacketButton } = require('../systems/redPacketSystem');
+const { handleLuckyBlockButton, handleLuckyBlockSelect, handleLuckyBlockModal } = require('../systems/luckyBlockSystem');
 
 module.exports = {
   name: 'interactionCreate',
@@ -63,6 +64,10 @@ module.exports = {
         if (interaction.customId.startsWith('red_packet:')) {
           return await handleRedPacketButton(interaction);
         }
+
+        if (interaction.customId.startsWith('luckyblock:')) {
+          return await handleLuckyBlockButton(interaction);
+        }
       }
 
       if (interaction.isStringSelectMenu()) {
@@ -79,6 +84,10 @@ module.exports = {
           if (!command || !command.handleSelect) return;
           return await command.handleSelect(interaction);
         }
+
+        if (interaction.customId.startsWith('luckyblock_select:')) {
+          return await handleLuckyBlockSelect(interaction);
+        }
       }
 
       if (interaction.isModalSubmit()) {
@@ -94,6 +103,10 @@ module.exports = {
           const command = interaction.client.commands.get('兌換');
           if (!command || !command.handleModal) return;
           return await command.handleModal(interaction);
+        }
+
+        if (interaction.customId.startsWith('luckyblock_modal:')) {
+          return await handleLuckyBlockModal(interaction);
         }
       }
     } catch (error) {

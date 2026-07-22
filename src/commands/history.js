@@ -20,6 +20,7 @@ const TYPE_LABELS = {
   COINFLIP: '硬幣翻轉',
   SLOTS: '幸運轉盤',
   MINES: '踩地雷',
+  LUCKY_BLOCK: '幸運方塊',
   FISHING: '釣魚',
   DAILY: '每日獎勵',
   CONVERT: '貨幣兌換',

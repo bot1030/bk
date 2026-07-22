@@ -6,7 +6,7 @@ module.exports = {
     '1319968425698922591'
   ],
 
-  gamblingTransactionTypes: ['COINFLIP', 'SLOTS', 'MINES'],
+  gamblingTransactionTypes: ['COINFLIP', 'SLOTS', 'MINES', 'LUCKY_BLOCK'],
 
   monitoringWindowMinutes: 30,
 

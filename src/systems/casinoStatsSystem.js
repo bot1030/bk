@@ -45,7 +45,13 @@ const GAME_DEFINITIONS = [
     title: '🎣 釣魚',
     types: ['FISHING'],
     betLabel: '總花費金額'
-  }
+  },
+  {
+    key: 'luckyblock',
+    title: '🎁 幸運方塊',
+    types: ['LUCKY_BLOCK'],
+    betLabel: '總投入金額'
+  },
 ];
 
 function formatNumber(value) {
