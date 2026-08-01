@@ -4,6 +4,7 @@ const { handleRoleShopSelect } = require('../systems/roleShopPanelSystem');
 const { handleCommentButton, handleCommentModal } = require('../systems/commentSystem');
 const { handleRedPacketButton } = require('../systems/redPacketSystem');
 const { handleLuckyBlockButton, handleLuckyBlockSelect, handleLuckyBlockModal } = require('../systems/luckyBlockSystem');
+const { handleNoteSelect, handleNoteModal, handleCleanNoteButton } = require('../systems/orderNoteSystem');
 
 module.exports = {
   name: 'interactionCreate',
@@ -68,6 +69,10 @@ module.exports = {
         if (interaction.customId.startsWith('luckyblock:')) {
           return await handleLuckyBlockButton(interaction);
         }
+
+        if (interaction.customId.startsWith('note_clean:')) {
+          return await handleCleanNoteButton(interaction);
+        }
       }
 
       if (interaction.isStringSelectMenu()) {
@@ -88,6 +93,10 @@ module.exports = {
         if (interaction.customId.startsWith('luckyblock_select:')) {
           return await handleLuckyBlockSelect(interaction);
         }
+
+        if (interaction.customId.startsWith('note_select:')) {
+          return await handleNoteSelect(interaction);
+        }
       }
 
       if (interaction.isModalSubmit()) {
@@ -107,6 +116,10 @@ module.exports = {
 
         if (interaction.customId.startsWith('luckyblock_modal:')) {
           return await handleLuckyBlockModal(interaction);
+        }
+
+        if (interaction.customId.startsWith('note_modal:')) {
+          return await handleNoteModal(interaction);
         }
       }
     } catch (error) {

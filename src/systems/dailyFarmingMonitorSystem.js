@@ -35,11 +35,13 @@ function parseSpendKey(tx) {
 }
 
 async function getMeaningfulGameStats(userId, since) {
+  // Only normal 金幣 spending counts as meaningful game activity.
+  // 活動金幣 spending is ignored so event coins cannot be used to bypass daily-farming warnings.
   const spendTransactions = await prisma.transaction.findMany({
     where: {
       userId,
       type: { in: GAME_TRANSACTION_TYPES },
-      currency: { in: ['COINS', 'EVENT_COINS'] },
+      currency: 'COINS',
       amount: { lt: 0 },
       createdAt: { gte: since }
     },
@@ -180,7 +182,7 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
       `有效主要遊戲局數：**${formatNumber(gameStats.meaningfulRounds)}**`,
       `主要遊戲總局數：**${formatNumber(gameStats.roundCount)}**`,
       `低金額主要遊戲局數：**${formatNumber(gameStats.lowSpendRounds)}**`,
-      `主要遊戲投入總額：**${formatCoins(gameStats.totalMainGameSpend)}**`,
+      `主要遊戲正式金幣投入總額：**${formatCoins(gameStats.totalMainGameSpend)}**`,
       `釣魚紀錄：**${formatNumber(fishingCount)}**（不列入主要遊戲）`,
       `目前金幣：**${formatCoinsWithEvent(user.coins, user.eventCoins)}**`,
       '',
@@ -189,7 +191,7 @@ async function checkDailyFarmingWarning(client, guild, discordUser) {
       '',
       '此通知只是提醒，不會自動處罰玩家。'
     ].join('\n'))
-    .setFooter({ text: `有效主要遊戲：硬幣翻轉、幸運轉盤、踩地雷、幸運方塊；每局投入至少 ${formatNumber(MEANINGFUL_GAME_MIN_SPEND)} 金幣才列入。` })
+    .setFooter({ text: `有效主要遊戲：硬幣翻轉、幸運轉盤、踩地雷、幸運方塊；每局正式金幣投入至少 ${formatNumber(MEANINGFUL_GAME_MIN_SPEND)} 才列入，活動金幣不列入。` })
     .setTimestamp();
 
   await sendAdminDms(client, embed);
