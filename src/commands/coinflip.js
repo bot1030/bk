@@ -8,6 +8,7 @@ const { getMemberRoleBenefits, formatBenefitLine } = require('../systems/roleBen
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
 const prisma = require('../database/prisma');
+const { replyIfPunished } = require('../systems/punishmentSystem');
 
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -65,6 +66,8 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (await replyIfPunished(interaction, 'COINFLIP')) return null;
+
     const bet = interaction.options.getInteger('bet');
     const choice = interaction.options.getString('choice');
     const check = validateBet(bet, gamblingConfig.coinflip.minBet, gamblingConfig.coinflip.maxBet);

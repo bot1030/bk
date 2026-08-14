@@ -19,6 +19,7 @@ const {
   applyFishingCooldownReduction,
   formatBenefitLine
 } = require('../systems/roleBenefitSystem');
+const { replyIfPunished } = require('../systems/punishmentSystem');
 
 function privatePayload(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -51,6 +52,8 @@ function getFishCooldownRemaining(user, member) {
 }
 
 async function executeFishing(interaction) {
+  if (await replyIfPunished(interaction, 'FISH', 'edit')) return null;
+
   const userBefore = await getOrCreateUser(interaction.user);
   const benefits = getMemberRoleBenefits(interaction.member);
   const effectiveCooldownMs = getEffectiveFishCooldownMs(interaction.member);
@@ -164,6 +167,8 @@ module.exports = {
     .setDescription('免費釣魚並獲得隨機獎勵，基礎冷卻時間為 1 小時 30 分鐘'),
 
   async execute(interaction) {
+    if (await replyIfPunished(interaction, 'FISH')) return null;
+
     const user = await getOrCreateUser(interaction.user);
     const benefits = getMemberRoleBenefits(interaction.member);
     const effectiveCooldownMs = getEffectiveFishCooldownMs(interaction.member);

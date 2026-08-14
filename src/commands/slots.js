@@ -7,6 +7,7 @@ const { rollSlots, calculatePayout } = require('../systems/gamblingSystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
 const prisma = require('../database/prisma');
+const { replyIfPunished } = require('../systems/punishmentSystem');
 
 function formatSpendBreakdown(spent, fallbackAmount) {
   const normal = Number(spent?.spentCoins || 0);
@@ -31,6 +32,8 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (await replyIfPunished(interaction, 'SLOTS')) return null;
+
     const bet = interaction.options.getInteger('bet');
     const check = validateBet(bet, gamblingConfig.slots.minBet, gamblingConfig.slots.maxBet);
 

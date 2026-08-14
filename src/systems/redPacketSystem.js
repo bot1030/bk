@@ -8,6 +8,7 @@ const {
 const prisma = require('../database/prisma');
 const { STARTING_COINS } = require('../config/economyConfig');
 const { formatCoins, formatEventCoins, formatJK, formatNumber } = require('../utils/format');
+const { getActivePunishment, buildPunishmentMessage } = require('./punishmentSystem');
 
 const CLAIM_RETRY_LIMIT = 6;
 
@@ -280,6 +281,11 @@ async function handleRedPacketButton(interaction) {
 
   const packetId = interaction.customId.split(':')[2];
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'RED_PACKET');
+  if (punishment) {
+    return interaction.editReply({ content: buildPunishmentMessage(punishment, 'RED_PACKET') });
+  }
 
   const result = await claimRedPacket(packetId, interaction.user);
 

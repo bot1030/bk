@@ -15,6 +15,7 @@ const { formatCoins, formatEventCoins, formatNumber } = require('../utils/format
 const { getOrCreateUser, spendCoins, addCoins } = require('./economySystem');
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('./riskSystem');
 const { announceBigWin } = require('./bigWinSystem');
+const { getActivePunishment, buildPunishmentMessage } = require('./punishmentSystem');
 
 const ADMIN_USER_IDS = [
   '473647287026057227',
@@ -304,6 +305,11 @@ async function handleLuckyBlockButton(interaction) {
   const action = parts[1];
 
   if (action === 'start') {
+    const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'LUCKY_BLOCK');
+    if (punishment) {
+      return interaction.reply(privatePayload({ content: buildPunishmentMessage(punishment, 'LUCKY_BLOCK') }));
+    }
+
     // Acknowledge immediately so Discord never shows "The application didn't respond"
     // while the private mode-select UI is being prepared.
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -347,6 +353,11 @@ async function handleLuckyBlockModal(interaction) {
   // Modal submits can timeout if database calls take too long.
   // Acknowledge immediately, then edit the private reply after checks finish.
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'LUCKY_BLOCK');
+  if (punishment) {
+    return interaction.editReply({ content: buildPunishmentMessage(punishment, 'LUCKY_BLOCK'), embeds: [], components: [] });
+  }
 
   const boxCount = Number(interaction.customId.split(':')[2]);
   const amount = parseAmount(interaction.fields.getTextInputValue('amount'));

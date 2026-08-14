@@ -217,3 +217,24 @@ model OrderNote {
   @@index([type, recordDate])
   @@index([submittedByDiscordId, submittedAt])
 }
+
+model Punishment {
+  id                 String    @id @default(cuid())
+  guildId            String?
+  targetDiscordId    String
+  targetUsername     String?
+  action             String
+  reason             String
+  createdByDiscordId String
+  startsAt           DateTime  @default(now())
+  expiresAt          DateTime?
+  active             Boolean   @default(true)
+  removedAt          DateTime?
+  removedByDiscordId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([targetDiscordId, action, active])
+  @@index([guildId, targetDiscordId, active])
+  @@index([active, expiresAt])
+}

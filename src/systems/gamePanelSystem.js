@@ -27,6 +27,7 @@ const { formatCoins, formatCoinsWithEvent, formatJK, formatDuration } = require(
 const { createConvertSessionUi } = require('../commands/convert');
 const { checkDailyFarmingWarning } = require('./dailyFarmingMonitorSystem');
 const { rollDailyBaseReward, getDailyRewardChanceText } = require('./dailyRewardSystem');
+const { getActivePunishment, buildPunishmentMessage } = require('./punishmentSystem');
 const {
   createBoard,
   buildMinesComponents,
@@ -416,6 +417,11 @@ async function sendSetupPanel(interaction, channel, type) {
 }
 
 async function claimDailyFromPanel(interaction) {
+  const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'DAILY');
+  if (punishment) {
+    return interaction.reply(privatePayload({ content: buildPunishmentMessage(punishment, 'DAILY') }));
+  }
+
   const user = await getOrCreateUser(interaction.user);
   const remaining = getRemainingCooldown(user.lastDaily, DAILY_COOLDOWN_MS);
 
@@ -461,6 +467,11 @@ async function claimDailyFromPanel(interaction) {
 
 async function executeCoinflipFromPanel(interaction, choice, bet) {
   await deferPrivate(interaction);
+
+  const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'COINFLIP');
+  if (punishment) {
+    return respondPrivate(interaction, { content: buildPunishmentMessage(punishment, 'COINFLIP') });
+  }
 
   const check = validateBet(bet, gamblingConfig.coinflip.minBet, gamblingConfig.coinflip.maxBet);
   if (!check.ok) return respondPrivate(interaction, { content: `❌ ${check.message}` });
@@ -542,6 +553,11 @@ async function executeCoinflipFromPanel(interaction, choice, bet) {
 
 async function executeSlotsFromPanel(interaction, bet) {
   await deferPrivate(interaction);
+
+  const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'SLOTS');
+  if (punishment) {
+    return respondPrivate(interaction, { content: buildPunishmentMessage(punishment, 'SLOTS') });
+  }
 
   const check = validateBet(bet, gamblingConfig.slots.minBet, gamblingConfig.slots.maxBet);
   if (!check.ok) return respondPrivate(interaction, { content: `❌ ${check.message}` });
@@ -643,6 +659,11 @@ async function handlePanelButton(interaction) {
   }
 
   if (game === 'fish' && action === 'start') {
+    const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'FISH');
+    if (punishment) {
+      return interaction.reply(privatePayload({ content: buildPunishmentMessage(punishment, 'FISH') }));
+    }
+
     const benefits = getMemberRoleBenefits(interaction.member);
     const effectiveCooldownMs = applyFishingCooldownReduction(fishingConfig.cooldownMs, benefits);
 
@@ -666,6 +687,11 @@ async function handlePanelButton(interaction) {
   }
 
   if (game === 'coinflip') {
+    const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'COINFLIP');
+    if (punishment) {
+      return interaction.reply(privatePayload({ content: buildPunishmentMessage(punishment, 'COINFLIP') }));
+    }
+
     const choice = action;
     const modal = new ModalBuilder()
       .setCustomId(`setup_modal:coinflip:${choice}`)
@@ -683,6 +709,11 @@ async function handlePanelButton(interaction) {
   }
 
   if (game === 'slots' && action === 'start') {
+    const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'SLOTS');
+    if (punishment) {
+      return interaction.reply(privatePayload({ content: buildPunishmentMessage(punishment, 'SLOTS') }));
+    }
+
     const modal = new ModalBuilder()
       .setCustomId('setup_modal:slots:start')
       .setTitle('幸運轉盤｜輸入投入金額');
@@ -704,6 +735,11 @@ async function handlePanelButton(interaction) {
   }
 
   if (game === 'mines' && action === 'start') {
+    const punishment = await getActivePunishment(interaction.user.id, interaction.guildId, 'MINES');
+    if (punishment) {
+      return interaction.reply(privatePayload({ content: buildPunishmentMessage(punishment, 'MINES') }));
+    }
+
     const modal = new ModalBuilder()
       .setCustomId('setup_modal:mines:start')
       .setTitle('踩地雷｜輸入投入與地雷數量');

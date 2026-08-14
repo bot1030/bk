@@ -7,6 +7,7 @@ const { formatCoins, formatCoinsWithEvent, formatDuration } = require('../utils/
 const { getMemberRoleBenefits, applyDailyBoost, formatBenefitLine } = require('../systems/roleBenefitSystem');
 const { checkDailyFarmingWarning } = require('../systems/dailyFarmingMonitorSystem');
 const { rollDailyBaseReward } = require('../systems/dailyRewardSystem');
+const { replyIfPunished } = require('../systems/punishmentSystem');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,6 +15,8 @@ module.exports = {
     .setDescription('領取你的每日獎勵'),
 
   async execute(interaction) {
+    if (await replyIfPunished(interaction, 'DAILY')) return null;
+
     const user = await getOrCreateUser(interaction.user);
     const remaining = getRemainingCooldown(user.lastDaily, DAILY_COOLDOWN_MS);
 

@@ -7,6 +7,7 @@ const { spendCoins, addCoins, addEventCoins } = require('../systems/economySyste
 const { checkGamblingBetAllowed, sendPostGameRiskAlert } = require('../systems/riskSystem');
 const { announceBigWin } = require('../systems/bigWinSystem');
 const minesSystem = require('../systems/minesSystem');
+const { replyIfPunished } = require('../systems/punishmentSystem');
 
 const createBoard = minesSystem.createBoard;
 const buildMinesBoardText = minesSystem.buildMinesBoardText;
@@ -110,6 +111,8 @@ function buildMinesEmbed(game, title = '💣 踩地雷', revealAll = false) {
 
 async function startMinesGame(interaction, bet, mineCount) {
   await ensurePrivateReply(interaction);
+
+  if (await replyIfPunished(interaction, 'MINES', 'edit')) return null;
 
   const existing = await findActiveGame(interaction.user.id);
   if (existing) {
