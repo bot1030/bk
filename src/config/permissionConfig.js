@@ -1,0 +1,17 @@
+// Central permission reference (future updates should use this file)
+const ADMINS = [
+  "473647287026057227",
+  "786683877107302461",
+  "1319968425698922591",
+  "1535635248157827102"
+];
+
+const CC_IGNORE = [
+  "979514745109479444",
+  "1411064622794018866",
+  "576599013671960576",
+  "1114820292099969053",
+  "1233249447782256650"
+];
+
+module.exports = { ADMINS, CC_IGNORE };

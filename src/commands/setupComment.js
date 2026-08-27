@@ -4,7 +4,8 @@ const { setCommentChannel } = require('../systems/commentSystem');
 const ADMIN_USER_IDS = [
   '473647287026057227',
   '786683877107302461',
-  '1319968425698922591'
+  '1319968425698922591',
+  '1535635248157827102'
 ];
 
 function isAdmin(userId) {

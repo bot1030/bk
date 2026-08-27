@@ -7,7 +7,8 @@ const { formatCoins, formatDuration } = require('../utils/format');
 const ADMIN_USER_IDS = new Set([
   '473647287026057227',
   '786683877107302461',
-  '1319968425698922591'
+  '1319968425698922591',
+  '1535635248157827102'
 ]);
 
 function isAdmin(userId) {
