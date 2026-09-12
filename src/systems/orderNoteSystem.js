@@ -14,8 +14,7 @@ const prisma = require('../database/prisma');
 const ADMIN_USER_IDS = new Set([
   '473647287026057227',
   '786683877107302461',
-  '1319968425698922591',
-  '1535635248157827102'
+  '1319968425698922591'
 ]);
 
 const COMPLETED_CATEGORY_ID = '1532935027686641894';
@@ -474,9 +473,10 @@ function formatFinalSettlement(summary) {
 }
 
 function formatRecentRecord(record) {
-  const shortId = record.id.slice(0, 8);
+  const shortId = String(record.id || '').slice(0, 8) || 'UNKNOWN';
   const date = formatDate(record.recordDate);
-  const noteText = record.note ? `｜${record.note}` : '';
+  const rawNote = record.note ? String(record.note).replace(/\s+/g, ' ').trim() : '';
+  const noteText = rawNote ? `｜${rawNote.slice(0, 120)}${rawNote.length > 120 ? '…' : ''}` : '';
 
   if (record.type === 'TOPUP') {
     return `💎 **${shortId}**｜${date}｜代儲收入 ${formatMoneyFromCents(record.incomeCents)}${noteText}`;
@@ -485,7 +485,7 @@ function formatRecentRecord(record) {
   return [
     `🎁 **${shortId}**｜${date}｜贈禮`,
     `收入 ${formatMoneyFromCents(record.incomeCents)}｜R ${formatNumber(record.gameCurrencyAmount)}｜成本 ${formatMoneyFromCents(record.costCents)}｜淨利 ${formatMoneyFromCents(record.netCents)}`,
-    `收款：${record.paymentReceiver}｜付成本：${record.costPayer}｜結果：${formatTransfer(record.transferDirection, record.transferCents)}${noteText}`
+    `收款：${record.paymentReceiver || '—'}｜付成本：${record.costPayer || '—'}｜${formatTransfer(record.transferDirection, record.transferCents)}${noteText}`
   ].join('\n');
 }
 
@@ -499,24 +499,36 @@ async function buildShownoteEmbed({ period = 'all', start, end, type = 'all' }) 
     where.recordDate = { gte: range.start, lte: range.end };
   }
 
-  const records = await prisma.orderNote.findMany({
-    where,
-    orderBy: { recordDate: 'desc' }
-  });
+  let records;
+  try {
+    records = await prisma.orderNote.findMany({
+      where,
+      orderBy: { recordDate: 'desc' }
+    });
+  } catch (error) {
+    console.error('[shownote] Failed to read order notes:', error);
+    return { error: '無法讀取訂單紀錄，資料沒有被刪除。請確認資料庫連線後再試。' };
+  }
 
-  if (records.length === 0) {
+  if (!records || records.length === 0) {
     return {
       embeds: [
         new EmbedBuilder()
           .setColor(0x95a5a6)
           .setTitle('🧾 訂單紀錄總覽')
-          .setDescription('沒有已記錄的訂單')
+          .setDescription([
+            `📅 範圍：**${range.label}**`,
+            '',
+            '沒有已記錄的訂單'
+          ].join('\n'))
       ]
     };
   }
 
   const summary = summarizeNotes(records);
-  const recent = records.slice(0, MAX_RECENT_LINES).map(formatRecentRecord).join('\n\n');
+  // Keep recent records safely below Discord's 1024-character field limit.
+  // Full transaction history remains available through /history.
+  const recentRecords = records.slice(0, 5);
 
   const embed = new EmbedBuilder()
     .setColor(0x2ecc71)
@@ -539,7 +551,7 @@ async function buildShownoteEmbed({ period = 'all', start, end, type = 'all' }) 
       {
         name: '🎁 贈禮收益',
         value: [
-          `總收益：**${formatMoneyFromCents(summary.giftNetCents)}**`,
+          `淨收益：**${formatMoneyFromCents(summary.giftNetCents)}**`,
           `總收入：${formatMoneyFromCents(summary.giftIncomeCents)}`,
           `總成本：${formatMoneyFromCents(summary.giftCostCents)}`,
           `訂單數：**${formatNumber(summary.giftCount)}** 筆`
@@ -554,17 +566,33 @@ async function buildShownoteEmbed({ period = 'all', start, end, type = 'all' }) 
           `最終對帳：**${formatFinalSettlement(summary)}**`
         ].join('\n'),
         inline: false
-      },
-      {
-        name: `🧾 最近紀錄${records.length > MAX_RECENT_LINES ? `（顯示最近 ${MAX_RECENT_LINES} 筆）` : ''}`,
-        value: recent || '沒有最近紀錄',
-        inline: false
       }
-    )
-    .setFooter({ text: 'JK遊戲商城 訂單紀錄' })
-    .setTimestamp();
+    );
 
-  return { embeds: [embed] };
+  for (const record of recentRecords) {
+    const value = formatRecentRecord(record);
+    embed.addFields({
+      name: `🧾 ${record.type === 'TOPUP' ? '代儲' : '贈禮'}｜${String(record.id || '').slice(0, 8)}`,
+      value: value.slice(0, 1000),
+      inline: false
+    });
+  }
+
+  if (records.length > recentRecords.length) {
+    embed.addFields({
+      name: '📚 更多紀錄',
+      value: `目前顯示最近 ${recentRecords.length} 筆，完整紀錄請使用 /history。`,
+      inline: false
+    });
+  }
+
+  return {
+    embeds: [
+      embed
+        .setFooter({ text: 'JK遊戲商城 訂單紀錄' })
+        .setTimestamp()
+    ]
+  };
 }
 
 function buildCleanConfirmPanel(userId) {
